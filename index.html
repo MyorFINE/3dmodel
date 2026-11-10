@@ -3,7 +3,7 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>3D Character World</title>
 
 <script type="importmap">
@@ -17,130 +17,117 @@
 
 <style>
 *{box-sizing:border-box}
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;font-family:Arial,sans-serif}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;font-family:Arial}
 canvas{display:block}
-#loading{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:18px;color:white;background:radial-gradient(circle,#24384c,#080d14)}
-.spinner{width:48px;height:48px;border:4px solid #ffffff25;border-top-color:#45b8ff;border-radius:50%;animation:spin .8s linear infinite}
+#loading{position:fixed;inset:0;background:#101923;color:white;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:15px;z-index:10}
+#spinner{width:42px;height:42px;border:4px solid #ffffff30;border-top-color:#42baff;border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-#loadText{font-size:14px}
-#loadError{color:#ff9999;font-size:12px;max-width:90%;text-align:center}
-#hud{position:fixed;top:15px;left:15px;color:white;font-size:12px;line-height:1.8;text-shadow:0 2px 5px black;pointer-events:none}
-#help{position:fixed;bottom:15px;left:50%;transform:translateX(-50%);background:#101820cc;color:white;padding:10px 15px;border-radius:9px;font-size:12px;white-space:nowrap;pointer-events:none}
-#errorBox{display:none;position:fixed;bottom:65px;left:10px;right:10px;max-height:25vh;overflow:auto;padding:10px;background:#350c0c;color:#ffbaba;font-size:12px;z-index:2000;white-space:pre-wrap}
+#hud{position:fixed;top:12px;left:14px;color:white;font-size:12px;line-height:1.8;text-shadow:0 2px 4px #000;pointer-events:none}
+#help{position:fixed;bottom:15px;left:50%;transform:translateX(-50%);background:#101820dd;color:white;padding:10px 14px;border-radius:8px;font-size:12px;white-space:nowrap}
+#error{display:none;position:fixed;z-index:20;bottom:10px;left:10px;right:10px;background:#400;color:white;padding:12px;white-space:pre-wrap;font-size:12px}
 </style>
 </head>
+
 <body>
 
 <div id="loading">
- <div class="spinner" id="spinner"></div>
- <div id="loadText">3D dunyo yuklanmoqda...</div>
+ <div id="spinner"></div>
+ <div id="loadText">3D modellar yuklanmoqda...</div>
  <div id="loadError"></div>
 </div>
 
 <div id="hud">
- <b>CHARACTER WORLD — THIRD PERSON</b><br>
- Holat: <span id="gameState">Yuklanmoqda</span><br>
+ <b>CHARACTER WORLD</b><br>
+ Kamera: FREE CAMERA<br>
+ Personaj: <span id="status">Yuklanmoqda</span><br>
  FPS: <span id="fps">0</span>
 </div>
 
-<div id="help">WASD — Harakat | SHIFT — Yugurish | SPACE — Sakrash | Sichqoncha — Kamera | Scroll — Zoom</div>
-<div id="errorBox"></div>
+<div id="help">
+ WASD — Kamera | Sichqoncha — Aylantirish | Space — Yuqoriga | Ctrl — Pastga | Shift — Tezroq | Scroll — Zoom
+</div>
+
+<div id="error"></div>
 
 <script type="module">
 import * as THREE from "three";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 
-/* ========================================
-   CONFIG
-======================================== */
+/* =========================================
+   FILES
+========================================= */
 
-const BASE = new URL("./", location.href);
+const BASE = new URL("./",location.href);
 
 const FILES = {
- idle: "idle.fbx",
- walk: "standartwalk.fbx",
- textures: {
-  suit: "male_casualsuit03_diffuse.png",
-  normal: "male_casualsuit03_normal.png",
-  body: "middleage_lightskinned_male_diffuse2.png",
-  shoes: "shoes05_diffuse.png",
-  hair: "short02_diffuse.png",
-  eyes: "brown_eye.png",
-  eyebrow: "eyebrow004.png",
-  eyelashes: "eyelashes01.png",
-  teeth: "teeth.png",
-  tongue: "tongue01_diffuse.png"
+ idle:"idle.fbx",
+ walk:"standartwalk.fbx",
+ textures:{
+  suit:"male_casualsuit03_diffuse.png",
+  normal:"male_casualsuit03_normal.png",
+  body:"middleage_lightskinned_male_diffuse2.png",
+  shoes:"shoes05_diffuse.png",
+  hair:"short02_diffuse.png",
+  eyes:"brown_eye.png",
+  eyebrow:"eyebrow004.png",
+  eyelashes:"eyelashes01.png",
+  teeth:"teeth.png",
+  tongue:"tongue01_diffuse.png"
  }
 };
 
-const SETTINGS = {
- characterHeight: 1.75,
+/* =========================================
+   SETTINGS
+========================================= */
 
- walkSpeed: 2.0,
- runSpeed: 4.5,
- jumpSpeed: 5.5,
- gravity: 15,
-
- // Third-person camera
- cameraDistance: 5.8,
- cameraHeight: 1.25,
- cameraSensitivity: 0.0025,
- minPitch: -0.35,
- maxPitch: 0.55,
-
- // Camera always remains behind character.
- minCameraDistance: 4.5,
- maxCameraDistance: 9,
-
- modelRotationY: 0,
-
- materialOverrides: {}
+const SETTINGS={
+ characterHeight:1.75,
+ walkSpeed:2,
+ runSpeed:4.5,
+ jumpSpeed:5.5,
+ gravity:15,
+ cameraSpeed:8,
+ cameraFastSpeed:18
 };
 
-/* ========================================
+/* =========================================
    UI
-======================================== */
+========================================= */
 
-const $ = id => document.getElementById(id);
+const $=id=>document.getElementById(id);
 
-function setLoading(text){
- $("loadText").textContent = text;
- console.log("[LOADING]",text);
+function loading(text){
+ $("loadText").textContent=text;
 }
 
-function hideLoading(){
- $("loading").style.display="none";
- $("gameState").textContent="Tayyor";
-}
-
-function fatalError(error){
+function showError(error){
  console.error(error);
  $("spinner").style.display="none";
- $("loadText").textContent="Yuklashda xatolik";
- $("loadError").textContent=error.message || String(error);
- $("errorBox").style.display="block";
- $("errorBox").textContent=error.stack || String(error);
+ $("loadText").textContent="Xatolik yuz berdi";
+ $("loadError").textContent=error.message||String(error);
+ $("error").style.display="block";
+ $("error").textContent=error.stack||String(error);
 }
 
-/* ========================================
-   THREE
-======================================== */
+/* =========================================
+   THREE SCENE
+========================================= */
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x9cb7ca);
-scene.fog = new THREE.Fog(0x9cb7ca,70,230);
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x9db9cd);
+scene.fog=new THREE.Fog(0x9db9cd,100,400);
 
-const camera = new THREE.PerspectiveCamera(
- 65,innerWidth/innerHeight,0.1,1500
+const camera=new THREE.PerspectiveCamera(
+ 65,innerWidth/innerHeight,0.1,2000
 );
 
-const renderer = new THREE.WebGLRenderer({
+const renderer=new THREE.WebGLRenderer({
  antialias:true,
  powerPreference:"high-performance"
 });
 
 renderer.setSize(innerWidth,innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.15;
@@ -156,238 +143,329 @@ let character=null;
 let mixer=null;
 let idleAction=null;
 let walkAction=null;
-let activeAction=null;
+let currentAction=null;
 let ready=false;
 
-let yaw=0;
-let pitch=0.10;
-let cameraDistance=SETTINGS.cameraDistance;
-
-let verticalVelocity=0;
-let grounded=true;
-
+const textures={};
 const keys={};
 
-let fpsCounter=0;
-let fpsElapsed=0;
+/* =========================================
+   FREE CAMERA
+   CAMERA PERSONAJGA BOG'LANMAGAN
+========================================= */
 
-/* ========================================
+const freeCamera={
+ position:new THREE.Vector3(0,3,9),
+ yaw:0,
+ pitch:-0.15,
+ sensitivity:0.002,
+ speed:8
+};
+
+function updateFreeCamera(delta){
+
+ const fast=keys.ShiftLeft||keys.ShiftRight;
+ const speed=fast?SETTINGS.cameraFastSpeed:SETTINGS.cameraSpeed;
+
+ const forward=new THREE.Vector3(
+  -Math.sin(freeCamera.yaw)*Math.cos(freeCamera.pitch),
+  Math.sin(freeCamera.pitch),
+  -Math.cos(freeCamera.yaw)*Math.cos(freeCamera.pitch)
+ );
+
+ const right=new THREE.Vector3(
+  Math.cos(freeCamera.yaw),
+  0,
+  -Math.sin(freeCamera.yaw)
+ );
+
+ if(keys.KeyW||keys.ArrowUp)
+  freeCamera.position.addScaledVector(forward,speed*delta);
+
+ if(keys.KeyS||keys.ArrowDown)
+  freeCamera.position.addScaledVector(forward,-speed*delta);
+
+ if(keys.KeyA||keys.ArrowLeft)
+  freeCamera.position.addScaledVector(right,-speed*delta);
+
+ if(keys.KeyD||keys.ArrowRight)
+  freeCamera.position.addScaledVector(right,speed*delta);
+
+ if(keys.Space)
+  freeCamera.position.y+=speed*delta;
+
+ if(keys.ControlLeft||keys.ControlRight)
+  freeCamera.position.y-=speed*delta;
+
+ camera.position.copy(freeCamera.position);
+
+ camera.lookAt(
+  freeCamera.position.x+forward.x,
+  freeCamera.position.y+forward.y,
+  freeCamera.position.z+forward.z
+ );
+}
+
+/* =========================================
+   CAMERA INPUT
+========================================= */
+
+renderer.domElement.addEventListener("click",()=>{
+ if(ready&&document.pointerLockElement!==renderer.domElement){
+  renderer.domElement.requestPointerLock();
+ }
+});
+
+document.addEventListener("mousemove",event=>{
+ if(document.pointerLockElement!==renderer.domElement)return;
+
+ freeCamera.yaw-=event.movementX*freeCamera.sensitivity;
+ freeCamera.pitch-=event.movementY*freeCamera.sensitivity;
+
+ freeCamera.pitch=THREE.MathUtils.clamp(
+  freeCamera.pitch,-1.5,1.5
+ );
+});
+
+renderer.domElement.addEventListener("wheel",event=>{
+ const direction=new THREE.Vector3(
+  -Math.sin(freeCamera.yaw)*Math.cos(freeCamera.pitch),
+  Math.sin(freeCamera.pitch),
+  -Math.cos(freeCamera.yaw)*Math.cos(freeCamera.pitch)
+ );
+
+ freeCamera.position.addScaledVector(direction,event.deltaY*0.012);
+});
+
+window.addEventListener("keydown",event=>{
+ keys[event.code]=true;
+
+ if(event.code==="Space"&&ready&&character&&character.userData.grounded){
+  character.userData.velocity=SETTINGS.jumpSpeed;
+  character.userData.grounded=false;
+ }
+
+});
+
+window.addEventListener("keyup",event=>{
+ keys[event.code]=false;
+});
+
+window.addEventListener("blur",()=>{
+ Object.keys(keys).forEach(key=>keys[key]=false);
+});
+
+/* =========================================
    WORLD
-======================================== */
+========================================= */
 
 function createWorld(){
 
- const hemisphere=new THREE.HemisphereLight(
-  0xe8f4ff,0x62604c,2.1
- );
- scene.add(hemisphere);
+ const hemi=new THREE.HemisphereLight(0xeaf5ff,0x5e604b,2);
+ scene.add(hemi);
 
  const ambient=new THREE.AmbientLight(0xffffff,0.65);
  scene.add(ambient);
 
  const sun=new THREE.DirectionalLight(0xfff0d8,3);
- sun.position.set(-25,40,25);
+ sun.position.set(-25,45,25);
  sun.castShadow=true;
  sun.shadow.mapSize.set(2048,2048);
- sun.shadow.camera.left=-40;
- sun.shadow.camera.right=40;
- sun.shadow.camera.top=40;
- sun.shadow.camera.bottom=-40;
+ sun.shadow.camera.left=-60;
+ sun.shadow.camera.right=60;
+ sun.shadow.camera.top=60;
+ sun.shadow.camera.bottom=-60;
  scene.add(sun);
 
  const ground=new THREE.Mesh(
   new THREE.PlaneGeometry(10000,10000),
   new THREE.MeshStandardMaterial({
-   color:0x637b59,
+   color:0x647b58,
    roughness:1
   })
  );
+
  ground.rotation.x=-Math.PI/2;
- ground.position.y=-0.03;
+ ground.position.y=-0.05;
  ground.receiveShadow=true;
  scene.add(ground);
 
- const grid=new THREE.GridHelper(
-  200,100,0x526c4f,0x7b8d70
- );
- grid.position.y=0;
+ const grid=new THREE.GridHelper(200,100,0x455b42,0x71816a);
  grid.material.transparent=true;
- grid.material.opacity=0.13;
+ grid.material.opacity=0.12;
  scene.add(grid);
+
+ // Character spawn marker
+ const marker=new THREE.Mesh(
+  new THREE.RingGeometry(0.65,0.72,48),
+  new THREE.MeshBasicMaterial({
+   color:0x4ec7ff,
+   side:THREE.DoubleSide
+  })
+ );
+
+ marker.rotation.x=-Math.PI/2;
+ marker.position.y=0.01;
+ scene.add(marker);
 }
 
-/* ========================================
-   TEXTURES
-======================================== */
-
-const textures={};
+/* =========================================
+   TEXTURE LOADER
+========================================= */
 
 async function loadTexture(name,file){
- const url=new URL(file,BASE).href;
 
  try{
-  console.log("[TEXTURE START]",name,url);
+  const url=new URL(file,BASE).href;
 
   const response=await fetch(url,{cache:"no-store"});
 
   if(!response.ok){
-   throw new Error("HTTP "+response.status+" "+url);
+   throw new Error("HTTP "+response.status+": "+file);
   }
 
   const blob=await response.blob();
-
-  if(!blob.size){
-   throw new Error("Empty image: "+file);
-  }
-
   const bitmap=await createImageBitmap(blob);
 
   const texture=new THREE.Texture(bitmap);
   texture.flipY=false;
-
-  texture.colorSpace=
-   name==="normal"
-    ? THREE.NoColorSpace
-    : THREE.SRGBColorSpace;
+  texture.colorSpace=name==="normal"
+   ?THREE.NoColorSpace
+   :THREE.SRGBColorSpace;
 
   texture.anisotropy=renderer.capabilities.getMaxAnisotropy();
   texture.needsUpdate=true;
 
-  console.log("[TEXTURE SUCCESS]",name,bitmap.width,bitmap.height);
+  textures[name]=texture;
 
+  console.log("Texture loaded:",name);
   return texture;
 
  }catch(error){
-  console.error("[TEXTURE FAILED]",name,file,error);
+  console.warn("Texture yuklanmadi:",name,error);
   return null;
  }
 }
 
 async function loadAllTextures(){
+
  const entries=Object.entries(FILES.textures);
 
- const results=await Promise.all(
-  entries.map(async([name,file])=>{
-   const texture=await loadTexture(name,file);
-   if(texture)textures[name]=texture;
-   return {name,loaded:!!texture};
-  })
+ await Promise.all(
+  entries.map(([name,file])=>loadTexture(name,file))
  );
-
- console.table(results);
 }
 
-/* ========================================
-   MATERIALS
-======================================== */
+/* =========================================
+   MATERIAL DETECTION
+========================================= */
 
 function detectTexture(meshName,materialName){
- const mesh=(meshName||"").toLowerCase();
- const mat=(materialName||"").toLowerCase();
- const combined=mesh+" "+mat;
 
- const override=SETTINGS.materialOverrides[materialName];
+ const name=((meshName||"")+" "+(materialName||"")).toLowerCase();
 
- if(override&&textures[override])return override;
-
- if(/shoe|boot|footwear/.test(combined))return "shoes";
- if(/hair|hairstyle/.test(combined))return "hair";
- if(/eyebrow|brow/.test(combined))return "eyebrow";
- if(/eyelash|lash/.test(combined))return "eyelashes";
- if(/teeth|tooth/.test(combined))return "teeth";
- if(/tongue/.test(combined))return "tongue";
- if(/eye|iris|pupil/.test(combined))return "eyes";
- if(/suit|jacket|shirt|trouser|pants|cloth|tie/.test(combined))return "suit";
- if(/body|skin|face|head|arm|leg|hand|neck|torso/.test(combined))return "body";
+ if(/shoe|boot|footwear/.test(name))return "shoes";
+ if(/hair|hairstyle/.test(name))return "hair";
+ if(/eyebrow|brow/.test(name))return "eyebrow";
+ if(/eyelash|lash/.test(name))return "eyelashes";
+ if(/teeth|tooth/.test(name))return "teeth";
+ if(/tongue/.test(name))return "tongue";
+ if(/eye|iris|pupil/.test(name))return "eyes";
+ if(/suit|jacket|shirt|trouser|pants|cloth|tie/.test(name))return "suit";
+ if(/body|skin|face|head|arm|leg|hand|neck|torso/.test(name))return "body";
 
  return null;
 }
 
-function prepareMaterial(material,meshName){
- const list=Array.isArray(material)?material:[material];
+function applyMaterials(model){
 
- return list.map(mat=>{
-  const textureName=detectTexture(meshName,mat.name);
+ model.traverse(object=>{
 
-  if(!mat.color)mat.color=new THREE.Color(0xffffff);
-  mat.color.set(0xffffff);
+  if(!object.isMesh)return;
 
-  if(textureName&&textures[textureName]){
-   mat.map=textures[textureName];
-  }
+  object.castShadow=true;
+  object.receiveShadow=true;
 
-  if(textureName==="suit"&&textures.normal&&!mat.normalMap){
-   mat.normalMap=textures.normal;
-   mat.normalScale.set(0.4,0.4);
-  }
+  const materials=Array.isArray(object.material)
+   ?object.material
+   :[object.material];
 
-  mat.needsUpdate=true;
+  materials.forEach(material=>{
 
-  console.log("[MATERIAL]",{
-   mesh:meshName,
-   material:mat.name,
-   texture:textureName,
-   hasMap:!!mat.map
+   const textureName=detectTexture(object.name,material.name);
+
+   material.color.set(0xffffff);
+
+   if(textureName&&textures[textureName]){
+    material.map=textures[textureName];
+   }
+
+   if(textureName==="suit"&&textures.normal){
+    material.normalMap=textures.normal;
+    material.normalScale.set(0.4,0.4);
+   }
+
+   material.needsUpdate=true;
   });
 
-  return mat;
  });
 }
 
-/* ========================================
-   CHARACTER
-======================================== */
+/* =========================================
+   CHARACTER CREATION
+========================================= */
 
-function prepareCharacter(model){
- const root=new THREE.Group();
- root.name="CharacterRoot";
+function createCharacter(fbx){
 
- model.traverse(obj=>{
-  if(!obj.isMesh)return;
-
-  obj.castShadow=true;
-  obj.receiveShadow=true;
-
-  obj.material=prepareMaterial(obj.material,obj.name);
-
-  if(obj.geometry){
-   obj.geometry.computeBoundingBox();
-   obj.geometry.computeBoundingSphere();
-  }
- });
-
- const box=new THREE.Box3().setFromObject(model);
+ const box=new THREE.Box3().setFromObject(fbx);
  const size=new THREE.Vector3();
  box.getSize(size);
 
  if(size.y<=0){
-  throw new Error("FBX model balandligi aniqlanmadi.");
+  throw new Error("FBX personaj o'lchamini aniqlab bo'lmadi.");
  }
 
  const scale=SETTINGS.characterHeight/size.y;
- model.scale.setScalar(scale);
+ fbx.scale.setScalar(scale);
 
- const scaledBox=new THREE.Box3().setFromObject(model);
- model.position.y-=scaledBox.min.y;
- model.rotation.y=SETTINGS.modelRotationY;
+ const scaledBox=new THREE.Box3().setFromObject(fbx);
 
- root.add(model);
+ // Modelni polga joylashtirish
+ fbx.position.y-=scaledBox.min.y;
 
- console.log("Model height:",size.y);
- console.log("Model scale:",scale);
+ applyMaterials(fbx);
+
+ const root=new THREE.Group();
+ root.name="PlayerCharacter";
+
+ root.add(fbx);
+
+ // Personaj kamera joyidan mustaqil spawn bo'ladi.
+ root.position.set(0,0,0);
+ root.rotation.set(0,Math.PI,0);
+
+ root.userData.velocity=0;
+ root.userData.grounded=true;
+
+ scene.add(root);
+
+ console.log("Character created:",size,scale);
 
  return root;
 }
 
-/* ========================================
-   ANIMATIONS
-======================================== */
+/* =========================================
+   ANIMATION SETUP
+========================================= */
 
-function makeInPlaceClip(source){
+function makeWalkClip(source){
+
  const clip=source.clone();
 
- for(const track of clip.tracks){
+ clip.tracks.forEach(track=>{
+
   if(track.name.toLowerCase().includes("mixamorighips.position")){
+
    const values=track.values;
 
    if(values.length>=3){
@@ -400,25 +478,22 @@ function makeInPlaceClip(source){
     }
    }
   }
- }
+
+ });
 
  return clip;
 }
 
 function setupAnimations(idleFBX,walkFBX){
- if(!idleFBX.animations.length){
-  throw new Error("Idle animatsiyasi topilmadi.");
- }
 
- if(!walkFBX.animations.length){
-  throw new Error("Walk animatsiyasi topilmadi.");
- }
+ if(!idleFBX.animations.length)
+  throw new Error("idle.fbx ichida animatsiya topilmadi.");
+
+ if(!walkFBX.animations.length)
+  throw new Error("standartwalk.fbx ichida animatsiya topilmadi.");
 
  const idleClip=idleFBX.animations[0].clone();
- const walkClip=makeInPlaceClip(walkFBX.animations[0]);
-
- console.log("IDLE TRACKS:",idleClip.tracks.length);
- console.log("WALK TRACKS:",walkClip.tracks.length);
+ const walkClip=makeWalkClip(walkFBX.animations[0]);
 
  mixer=new THREE.AnimationMixer(character);
 
@@ -427,195 +502,72 @@ function setupAnimations(idleFBX,walkFBX){
 
  idleAction.play();
  walkAction.play();
- walkAction.enabled=true;
+
  walkAction.setEffectiveWeight(0);
 
- activeAction=idleAction;
+ currentAction=idleAction;
 }
 
-function changeAnimation(moving){
+/* =========================================
+   ANIMATION SWITCH
+========================================= */
+
+function setAnimation(moving){
+
  if(!idleAction||!walkAction)return;
 
  const next=moving?walkAction:idleAction;
 
- if(next===activeAction)return;
+ if(next===currentAction)return;
 
  next.reset();
  next.enabled=true;
  next.setEffectiveWeight(1);
 
- activeAction.crossFadeTo(next,0.22,false);
+ currentAction.crossFadeTo(next,0.2,false);
+
  next.play();
-
- activeAction=next;
+ currentAction=next;
 }
 
-/* ========================================
-   LOAD
-======================================== */
+/* =========================================
+   CHARACTER MOVEMENT
+========================================= */
 
-async function loadCharacter(){
- setLoading("Teksturalar yuklanmoqda...");
- await loadAllTextures();
+function updateCharacter(delta){
 
- setLoading("Idle modeli yuklanmoqda...");
- const idleFBX=await fbxLoader.loadAsync(
-  new URL(FILES.idle,BASE).href
- );
-
- setLoading("Walk animatsiyasi yuklanmoqda...");
- const walkFBX=await fbxLoader.loadAsync(
-  new URL(FILES.walk,BASE).href
- );
-
- setLoading("Personaj sahnaga joylashtirilmoqda...");
-
- character=prepareCharacter(idleFBX);
- scene.add(character);
-
- setupAnimations(idleFBX,walkFBX);
-
- character.position.set(0,0,0);
-
- ready=true;
- hideLoading();
-
- console.log("GAME READY");
-}
-
-/* ========================================
-   THIRD PERSON CAMERA
-======================================== */
-
-function updateCamera(delta){
- if(!character)return;
-
- // Target point is around upper chest, not eye level.
- const target=new THREE.Vector3(
-  character.position.x,
-  character.position.y+SETTINGS.cameraHeight,
-  character.position.z
- );
-
- // Camera stays behind character at all times.
- const distance=Math.max(
-  SETTINGS.minCameraDistance,
-  cameraDistance
- );
-
- const horizontal=Math.cos(pitch)*distance;
- const vertical=Math.sin(pitch)*distance;
-
- const desired=new THREE.Vector3(
-  target.x+Math.sin(yaw)*horizontal,
-  target.y+vertical,
-  target.z+Math.cos(yaw)*horizontal
- );
-
- camera.position.lerp(
-  desired,
-  1-Math.exp(-8*delta)
- );
-
- camera.lookAt(target);
-}
-
-/* ========================================
-   INPUT
-======================================== */
-
-window.addEventListener("keydown",event=>{
- keys[event.code]=true;
-
- if(
-  event.code==="Space"&&
-  grounded&&
-  ready
- ){
-  verticalVelocity=SETTINGS.jumpSpeed;
-  grounded=false;
-  event.preventDefault();
- }
-});
-
-window.addEventListener("keyup",event=>{
- keys[event.code]=false;
-});
-
-window.addEventListener("blur",()=>{
- for(const key in keys)keys[key]=false;
-});
-
-renderer.domElement.addEventListener("click",()=>{
- if(ready&&document.pointerLockElement!==renderer.domElement){
-  renderer.domElement.requestPointerLock();
- }
-});
-
-document.addEventListener("mousemove",event=>{
- if(document.pointerLockElement!==renderer.domElement)return;
-
- yaw-=event.movementX*SETTINGS.cameraSensitivity;
- pitch-=event.movementY*SETTINGS.cameraSensitivity;
-
- pitch=THREE.MathUtils.clamp(
-  pitch,
-  SETTINGS.minPitch,
-  SETTINGS.maxPitch
- );
-});
-
-renderer.domElement.addEventListener("wheel",event=>{
- cameraDistance+=event.deltaY*0.004;
-
- cameraDistance=THREE.MathUtils.clamp(
-  cameraDistance,
-  SETTINGS.minCameraDistance,
-  SETTINGS.maxCameraDistance
- );
-});
-
-/* ========================================
-   MOVEMENT
-======================================== */
-
-function updateMovement(delta){
  if(!character||!ready)return;
 
  let forward=0;
  let side=0;
 
- if(keys.KeyW||keys.ArrowUp)forward+=1;
- if(keys.KeyS||keys.ArrowDown)forward-=1;
- if(keys.KeyA||keys.ArrowLeft)side-=1;
- if(keys.KeyD||keys.ArrowRight)side+=1;
+ if(keys.KeyW)forward++;
+ if(keys.KeyS)forward--;
+ if(keys.KeyA)side--;
+ if(keys.KeyD)side++;
 
  const moving=forward!==0||side!==0;
 
  if(moving){
+
   const input=new THREE.Vector2(side,forward).normalize();
 
-  const cameraForward=new THREE.Vector3(
-   -Math.sin(yaw),0,-Math.cos(yaw)
+  // Personaj harakati kameraga emas,
+  // o'zining dunyo koordinatasiga asoslangan.
+  const direction=new THREE.Vector3(
+   input.x,
+   0,
+   -input.y
   );
 
-  const cameraRight=new THREE.Vector3(
-   -cameraForward.z,0,cameraForward.x
+  const angle=Math.atan2(direction.x,direction.z);
+
+  let difference=Math.atan2(
+   Math.sin(angle-character.rotation.y),
+   Math.cos(angle-character.rotation.y)
   );
 
-  const direction=new THREE.Vector3()
-   .addScaledVector(cameraForward,input.y)
-   .addScaledVector(cameraRight,input.x)
-   .normalize();
-
-  const targetAngle=Math.atan2(direction.x,direction.z);
-
-  const difference=Math.atan2(
-   Math.sin(targetAngle-character.rotation.y),
-   Math.cos(targetAngle-character.rotation.y)
-  );
-
-  character.rotation.y+=difference*(1-Math.exp(-12*delta));
+  character.rotation.y+=difference*(1-Math.exp(-10*delta));
 
   const running=keys.ShiftLeft||keys.ShiftRight;
   const speed=running?SETTINGS.runSpeed:SETTINGS.walkSpeed;
@@ -623,86 +575,143 @@ function updateMovement(delta){
   character.position.addScaledVector(direction,speed*delta);
  }
 
- if(!grounded){
-  verticalVelocity-=SETTINGS.gravity*delta;
-  character.position.y+=verticalVelocity*delta;
+ if(!character.userData.grounded){
+
+  character.userData.velocity-=SETTINGS.gravity*delta;
+  character.position.y+=character.userData.velocity*delta;
 
   if(character.position.y<=0){
    character.position.y=0;
-   verticalVelocity=0;
-   grounded=true;
+   character.userData.velocity=0;
+   character.userData.grounded=true;
   }
  }
 
- changeAnimation(moving);
+ setAnimation(moving);
 
- $("gameState").textContent=
-  moving
-   ?(keys.ShiftLeft||keys.ShiftRight?"Yugurmoqda":"Yurmoqda")
-   :"Idle";
+ $("status").textContent=moving
+  ?(keys.ShiftLeft||keys.ShiftRight?"Yugurmoqda":"Yurmoqda")
+  :"Idle";
 }
 
-/* ========================================
-   MAIN LOOP
-======================================== */
+/* =========================================
+   LOAD ASSETS
+========================================= */
+
+async function loadGame(){
+
+ loading("Teksturalar yuklanmoqda...");
+ await loadAllTextures();
+
+ loading("Idle FBX yuklanmoqda...");
+ const idleFBX=await fbxLoader.loadAsync(
+  new URL(FILES.idle,BASE).href
+ );
+
+ loading("Walk FBX yuklanmoqda...");
+ const walkFBX=await fbxLoader.loadAsync(
+  new URL(FILES.walk,BASE).href
+ );
+
+ loading("Personaj yaratilmoqda...");
+
+ // Idle FBX ichidagi modelni personaj sifatida ishlatamiz.
+ character=createCharacter(idleFBX);
+
+ // Animation mixer
+ setupAnimations(idleFBX,walkFBX);
+
+ ready=true;
+
+ $("loading").style.display="none";
+
+ console.log("GAME READY");
+}
+
+/* =========================================
+   FPS
+========================================= */
+
+let fpsFrames=0;
+let fpsTime=0;
+
+function updateFPS(delta){
+
+ fpsFrames++;
+ fpsTime+=delta;
+
+ if(fpsTime>=0.5){
+  $("fps").textContent=Math.round(fpsFrames/fpsTime);
+  fpsFrames=0;
+  fpsTime=0;
+ }
+}
+
+/* =========================================
+   RENDER LOOP
+========================================= */
 
 function animate(){
+
  requestAnimationFrame(animate);
 
  const delta=Math.min(clock.getDelta(),0.05);
 
+ updateFreeCamera(delta);
+
  if(ready){
-  updateMovement(delta);
+  updateCharacter(delta);
 
   if(mixer)mixer.update(delta);
-
-  updateCamera(delta);
  }
+
+ updateFPS(delta);
 
  renderer.render(scene,camera);
-
- fpsCounter++;
- fpsElapsed+=delta;
-
- if(fpsElapsed>=0.5){
-  $("fps").textContent=Math.round(fpsCounter/fpsElapsed);
-  fpsCounter=0;
-  fpsElapsed=0;
- }
 }
 
-/* ========================================
+/* =========================================
    RESIZE
-======================================== */
+========================================= */
 
 window.addEventListener("resize",()=>{
+
  camera.aspect=innerWidth/innerHeight;
  camera.updateProjectionMatrix();
+
  renderer.setSize(innerWidth,innerHeight);
 });
 
-/* ========================================
+/* =========================================
    START
-======================================== */
+========================================= */
 
 async function start(){
+
+ createWorld();
+
+ // Kamera mustaqil boshlang'ich pozitsiyasi.
+ freeCamera.position.set(0,3,9);
+ freeCamera.yaw=0;
+ freeCamera.pitch=-0.15;
+
+ camera.position.copy(freeCamera.position);
+
+ const forward=new THREE.Vector3(0,0,-1);
+ camera.lookAt(
+  freeCamera.position.x+forward.x,
+  freeCamera.position.y+forward.y,
+  freeCamera.position.z+forward.z
+ );
+
+ animate();
+
  try{
-  createWorld();
-
-  // Initial third-person view, not first-person.
-  cameraDistance=SETTINGS.cameraDistance;
-  camera.position.set(0,2,6);
-  camera.lookAt(0,1,0);
-
-  animate();
-
-  await loadCharacter();
-
-  updateCamera(1/60);
-
+  await loadGame();
  }catch(error){
-  fatalError(error);
+  showError(error);
  }
+
 }
 
 start();
