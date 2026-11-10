@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3rd Person WASD Movement Test</title>
+    <title>3D Model Viewer - GitHub Pages</title>
     <style>
         body {
             margin: 0;
@@ -22,7 +22,7 @@
             pointer-events: none;
         }
     </style>
-    <!-- Three.js va kerakli kutubxonalar -->
+    <!-- Three.js va zaruriy kutubxonalar -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/fflate.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
@@ -86,13 +86,16 @@
             controls.maxDistance = 10;
             controls.maxPolarAngle = Math.PI / 2 - 0.05;
 
+            // GitHub'dagi aniq fayl nomlaringiz bo'yicha teksturalarni yuklaymiz
             const textureLoader = new THREE.TextureLoader();
-
-            // Har bir qism uchun teksturalarni yuklab olamiz
             const textures = {
-                body: textureLoader.load('male_casualsuit03_diffuse.png'), // Yoki .jpg
+                body: textureLoader.load('middleage_lightskinned_male_diffuse2.png'),
+                suit: textureLoader.load('male_casualsuit03_diffuse.png'),
                 shoes: textureLoader.load('shoes05_diffuse.png'),
-                shorts: textureLoader.load('short02_diffuse.png')
+                shorts: textureLoader.load('short02_diffuse.png'),
+                eyes: textureLoader.load('brown_eye.png'),
+                teeth: textureLoader.load('teeth.png'),
+                tongue: textureLoader.load('tongue01_diffuse.png')
             };
 
             const loader = new THREE.FBXLoader();
@@ -105,17 +108,27 @@
                         child.castShadow = true;
                         child.receiveShadow = true;
 
-                        // Material nomiga qarab mos teksturani beramiz
                         const matName = child.material.name ? child.material.name.toLowerCase() : '';
-                        
-                        if (matName.includes('shoe') && textures.shoes) {
+                        const meshName = child.name ? child.name.toLowerCase() : '';
+
+                        // Qismlarga qarab mos teksturani biriktiramiz
+                        if ((matName.includes('shoe') || meshName.includes('shoe')) && textures.shoes) {
                             child.material.map = textures.shoes;
-                        } else if (matName.includes('short') && textures.shorts) {
+                        } else if ((matName.includes('short') || meshName.includes('short')) && textures.shorts) {
                             child.material.map = textures.shorts;
+                        } else if ((matName.includes('suit') || matName.includes('body') || meshName.includes('body')) && textures.suit) {
+                            child.material.map = textures.suit;
+                        } else if ((matName.includes('eye') || meshName.includes('eye')) && textures.eyes) {
+                            child.material.map = textures.eyes;
+                        } else if ((matName.includes('teeth') || meshName.includes('teeth')) && textures.teeth) {
+                            child.material.map = textures.teeth;
+                        } else if ((matName.includes('tongue') || meshName.includes('tongue')) && textures.tongue) {
+                            child.material.map = textures.tongue;
                         } else if (textures.body) {
+                            // Standart tana teksturasi
                             child.material.map = textures.body;
                         }
-                        
+
                         child.material.needsUpdate = true;
                     }
                 });
@@ -154,8 +167,6 @@
             if (keys.w) moveVector.z -= 1;
             if (keys.s) moveVector.z += 1;
             if (keys.a) moveVector.x -= 1;
-            if/keys.d) moveVector.x += 1; // xatolikni tuzatish uchun pastda to'g'ri yozilgan
-
             if (keys.d) moveVector.x += 1;
 
             if (moveVector.lengthSq() > 0) {
