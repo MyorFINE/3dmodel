@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Model Viewer - GitHub Pages</title>
+    <title>3D Third-Person Game</title>
     <style>
         body {
             margin: 0;
@@ -26,52 +26,54 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/fflate.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
 
     <div id="info">
-        <h3>Boshqaruv:</h3>
-        <p><b>W, A, S, D</b> - Personajni harakatlantirish (Yurganda animatsiya ishlaydi)</p>
-        <p>Sichqoncha - Kamerani aylanib ko'rish</p>
+        <h3>O'yin Boshqaruvi:</h3>
+        <p><b>W, A, S, D</b> - Yurish</p>
+        <p><b>Sichqoncha</b> - Kamerani aylantirish</p>
     </div>
 
     <script>
-        let scene, camera, renderer, controls;
+        let scene, camera, renderer;
         let model, mixer;
-        let walkAction; // Animatsiyani boshqarish uchun o'zgaruvchi
+        let walkAction;
         let clock = new THREE.Clock();
 
         const keys = { w: false, a: false, s: false, d: false };
 
+        // Kamera va personaj burchaklarini boshqarish uchun
+        let cameraAngle = 0;
+        let cameraRadius = 3.5; // Personajdan qanchalik uzoqligi
+        let cameraHeight = 1.8; // Kameraning balandligi
+
         function init() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0xa0a0a0);
-            scene.fog = new THREE.Fog(0xa0a0a0, 10, 50);
+            scene.fog = new THREE.Fog(0xa0a0a0, 20, 100);
 
-            // Kamerani personajga yaqinroq va ortiga o'rnatamiz
-            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
-            camera.position.set(0, 2.5, 4);
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444);
-            hemiLight.position.set(0, 20, 0);
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
+            hemiLight.position.set(0, 50, 0);
             scene.add(hemiLight);
 
-            const dirLight = new THREE.DirectionalLight(0xffffff);
-            dirLight.position.set(3, 10, 10);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            dirLight.position.set(10, 50, 10);
             dirLight.castShadow = true;
             scene.add(dirLight);
 
             // Yer tekisligi
             const mesh = new THREE.Mesh(
-                new THREE.PlaneGeometry(100, 100),
+                new THREE.PlaneGeometry(200, 200),
                 new THREE.MeshPhongMaterial({ color: 0x999999, depthWrite: false })
             );
             mesh.rotation.x = -Math.PI / 2;
             mesh.receiveShadow = true;
             scene.add(mesh);
 
-            const grid = new THREE.GridHelper(100, 50, 0x000000, 0x000000);
+            const grid = new THREE.GridHelper(200, 100, 0x000000, 0x000000);
             grid.material.opacity = 0.2;
             grid.material.transparent = true;
             scene.add(grid);
@@ -82,13 +84,7 @@
             renderer.shadowMap.enabled = true;
             document.body.appendChild(renderer.domElement);
 
-            controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.minDistance = 1.5;
-            controls.maxDistance = 6; // Kameraning uzoqlashish chegarasi qisqartirildi
-            controls.maxPolarAngle = Math.PI / 2 - 0.05;
-
-            // Teksturalarni yuklaymiz
+            // Teksturalarni yuklash
             const textureLoader = new THREE.TextureLoader();
             const textures = {
                 body: textureLoader.load('middleage_lightskinned_male_diffuse2.png'),
@@ -103,7 +99,9 @@
             const loader = new THREE.FBXLoader();
             loader.load('standartwalk.fbx', function (object) {
                 model = object;
-                model.scale.setScalar(0.02);
+                
+                // MASSHTABNI TO'G'RI TAYINLAYMIZ (Mixamo modellari uchun odatda 1 yoki 0.01 bo'ladi, 1 qilib ko'ramiz)
+                model.scale.setScalar(1.0); 
 
                 model.traverse(function (child) {
                     if (child.isMesh) {
@@ -133,11 +131,9 @@
                     }
                 });
 
-                // Animatsiyani yuklaymiz, lekin darhol o'ynatmaymiz (STOP holatida turadi)
                 if (object.animations && object.animations.length > 0) {
                     mixer = new THREE.AnimationMixer(model);
                     walkAction = mixer.clipAction(object.animations[0]);
-                    // walkAction boshida o'chiq turadi
                 }
 
                 scene.add(model);
@@ -148,6 +144,16 @@
             window.addEventListener('resize', onWindowResize);
             window.addEventListener('keydown', (e) => handleKey(e, true));
             window.addEventListener('keyup', (e) => handleKey(e, false));
+
+            // Sichqoncha orqali kamerani aylantirish
+            let isMouseDown = false;
+            window.addEventListener('mousedown', () => isMouseDown = true);
+            window.addEventListener('mouseup', () => isMouseDown = false);
+            window.addEventListener('mousemove', (e) => {
+                if (isMouseDown) {
+                    cameraAngle -= e.movementX * 0.005;
+                }
+            });
 
             animate();
         }
@@ -162,29 +168,66 @@
         function updateMovement(delta) {
             if (!model) return;
 
-            const moveSpeed = 3.0 * delta;
-            const moveVector = new THREE.Vector3();
+            const moveSpeed = 4.0 * delta;
+            let moving = false;
 
-            if (keys.w) moveVector.z -= 1;
-            if (keys.s) moveVector.z += 1;
-            if (keys.a) moveVector.x -= 1;
-            if (keys.d) moveVector.x += 1;
+            // Personaj harakati
+            if (keys.w) {
+                model.position.z -= moveSpeed;
+                model.rotation.y = Math.PI; // Oldinga qarash
+                moving = true;
+            }
+            if (keys.s) {
+                model.position.z += moveSpeed;
+                model.rotation.y = 0; // Orqaga qarash
+                moving = true;
+            }
+            if (keys.a) {
+                model.position.x -= moveSpeed;
+                model.rotation.y = -Math.PI / 2; // Chapga
+                moving = true;
+            }
+            if (keys.d) {
+                model.position.x += moveSpeed;
+                model.rotation.y = Math.PI / 2; // O'ngga
+                moving = true;
+            }
 
-            // Harakatlanish va animatsiyani boshqarish
-            if (moveVector.lengthSq() > 0) {
-                moveVector.normalize();
-                const cameraAngle = Math.atan2(
-                    camera.position.x - model.position.x,
-                    camera.position.z - model.position.z
-                );
-                const angle = Math.atan2(moveVector.x, moveVector.z) + cameraAngle;
-                model.rotation.y = angle + Math.PI;
-                model.position.x += Math.sin(angle) * moveSpeed;
-                model.position.z += Math.cos(angle) * moveSpeed;
-
-                // WASD bosilganda animatsiyani ishga tushiramiz
-                if (walkAction && !walkAction.isRunning()) {
-                    walkAction.play();
+            // Animatsiyani boshqarish
+            if (walkAction) {
+                if (moving) {
+                    if (!walkAction.isRunning()) walkAction.play();
+                } else {
+                    if (walkAction.isRunning()) walkAction.stop();
                 }
-            } else {
-                // Hech q
+            }
+
+            // KAMERA HARAKATI (Har doim personaj ortida turadi - haqiqiy 3rd person)
+            camera.position.x = model.position.x + Math.sin(cameraAngle) * cameraRadius;
+            camera.position.z = model.position.z + Math.cos(cameraAngle) * cameraRadius;
+            camera.position.y = model.position.y + cameraHeight;
+
+            // Kamera doimo personajning boshiga qaraydi
+            camera.lookAt(model.position.x, model.position.y + 1.2, model.position.z);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+
+            if (mixer) mixer.update(delta);
+            updateMovement(delta);
+
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>
