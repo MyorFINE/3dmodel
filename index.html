@@ -4,6 +4,1178 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Open World Character System</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{overflow:hidden;background:#8998a2;font-family:Arial}
+canvas{display:block}
+
+#loading{
+ position:fixed;inset:0;background:#10151b;color:white;
+ display:flex;align-items:center;justify-content:center;
+ flex-direction:column;gap:15px;z-index:100
+}
+#loading small{color:#aab4c0}
+#progress{
+ width:230px;height:4px;background:#333;
+ overflow:hidden;border-radius:5px
+}
+#progress span{
+ display:block;width:40%;height:100%;
+ background:#55b9ff;animation:load 1s infinite
+}
+@keyframes load{
+ from{transform:translateX(-100%)}
+ to{transform:translateX(350%)}
+}
+
+#loadError{
+ max-width:450px;text-align:center;
+ color:#ff7777;font-size:12px;line-height:1.6
+}
+
+#start{
+ position:fixed;inset:0;z-index:50;
+ display:none;align-items:center;justify-content:center;
+ background:#0007
+}
+#start button{
+ background:#171c24;color:white;
+ border:1px solid #718096;
+ padding:18px 40px;border-radius:7px;
+ cursor:pointer;font-size:15px
+}
+#start button:hover{background:#303b4a}
+
+#hud{
+ position:fixed;top:20px;left:20px;
+ color:white;background:#10151cdd;
+ padding:15px 19px;border-radius:9px;
+ border:1px solid #ffffff20;
+ font-size:12px;line-height:2;
+ pointer-events:none
+}
+#hud strong{font-size:14px;letter-spacing:1px}
+
+#status{
+ position:fixed;top:20px;right:20px;
+ color:white;background:#10151cdd;
+ padding:12px 18px;border-radius:7px;
+ font-size:12px
+}
+#statusDot{
+ display:inline-block;width:7px;height:7px;
+ border-radius:50%;background:#5bdf91;margin-right:7px
+}
+#bottom{
+ position:fixed;bottom:20px;left:50%;
+ transform:translateX(-50%);
+ background:#10151cbb;color:white;
+ padding:10px 18px;border-radius:6px;
+ font-size:11px;pointer-events:none
+}
+</style>
+</head>
+
+<body>
+
+<div id="loading">
+ <h2>OPEN WORLD SYSTEM</h2>
+ <small id="loadText">Teksturalar yuklanmoqda...</small>
+ <div id="progress"><span></span></div>
+ <div id="loadError"></div>
+</div>
+
+<div id="start">
+ <button id="startBtn">START GAME</button>
+</div>
+
+<div id="hud">
+ <strong>OPEN WORLD</strong><br>
+ W A S D — Harakat<br>
+ SHIFT — Yugurish<br>
+ SPACE — Sakrash<br>
+ MOUSE — Kamera<br>
+ ESC — Sichqonchani bo'shatish
+</div>
+
+<div id="status">
+ <span id="statusDot"></span>IDLE
+</div>
+
+<div id="bottom">THIRD PERSON · FREE MOVEMENT</div>
+
+<script type="importmap">
+{
+ "imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+ }
+}
+</script>
+
+<script type="module">
+
+import * as THREE from 'three';
+import {FBXLoader} from 'three/addons/loaders/FBXLoader.js';
+
+// =====================================================
+// 1. CONFIGURATION
+// =====================================================
+
+const CONFIG={
+
+ characterHeight:1.75,
+
+ walkSpeed:2.0,
+ sprintSpeed:4.2,
+
+ acceleration:9,
+ deceleration:12,
+ turnSpeed:11,
+
+ modelForwardOffset:0,
+
+ cameraDistance:4.8,
+ cameraHeight:0.2,
+ cameraTargetHeight:1.15,
+ cameraSensitivity:0.0025,
+ cameraSmooth:9,
+
+ minPitch:-0.3,
+ maxPitch:0.65,
+
+ animationFade:0.25,
+
+ walkAnimationSpeed:1,
+ sprintAnimationSpeed:1.35,
+
+ gravity:18,
+ jumpForce:6,
+
+ worldSize:10000,
+
+};
+
+// =====================================================
+// 2. LOADING UI
+// =====================================================
+
+const $=id=>document.getElementById(id);
+
+function loadingMessage(message){
+ $('loadText').textContent=message;
+}
+
+function showError(message){
+ $('loadError').textContent=message;
+}
+
+// =====================================================
+// 3. RENDERER
+// =====================================================
+
+const scene=new THREE.Scene();
+
+scene.background=new THREE.Color(0x9caab7);
+scene.fog=new THREE.Fog(0x9caab7,100,500);
+
+const camera=new THREE.PerspectiveCamera(
+ 55,innerWidth/innerHeight,0.1,2000
+);
+
+const renderer=new THREE.WebGLRenderer({
+ antialias:true,
+ powerPreference:'high-performance'
+});
+
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.2;
+
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+
+document.body.appendChild(renderer.domElement);
+
+// =====================================================
+// 4. LIGHTING
+// =====================================================
+
+// Strong ambient lighting prevents unlit dark materials.
+
+const ambient=new THREE.AmbientLight(
+ 0xffffff,1.8
+);
+scene.add(ambient);
+
+const hemisphere=new THREE.HemisphereLight(
+ 0xffffff,0x777766,1.5
+);
+scene.add(hemisphere);
+
+const sun=new THREE.DirectionalLight(
+ 0xffffff,2.5
+);
+
+sun.position.set(-15,25,15);
+sun.castShadow=true;
+
+sun.shadow.mapSize.set(2048,2048);
+
+sun.shadow.camera.left=-40;
+sun.shadow.camera.right=40;
+sun.shadow.camera.top=40;
+sun.shadow.camera.bottom=-40;
+
+sun.shadow.bias=-0.0002;
+
+scene.add(sun);
+
+// =====================================================
+// 5. OPEN WORLD GROUND
+// =====================================================
+
+const ground=new THREE.Mesh(
+ new THREE.PlaneGeometry(
+  CONFIG.worldSize,
+  CONFIG.worldSize
+ ),
+ new THREE.MeshStandardMaterial({
+  color:0x78866b,
+  roughness:1,
+  metalness:0
+ })
+);
+
+ground.rotation.x=-Math.PI/2;
+ground.receiveShadow=true;
+
+scene.add(ground);
+
+const grid=new THREE.GridHelper(
+ 1000,100,0x888888,0x999999
+);
+
+grid.position.y=0.015;
+grid.material.transparent=true;
+grid.material.opacity=0.08;
+
+scene.add(grid);
+
+// =====================================================
+// 6. TEXTURE SYSTEM
+// =====================================================
+
+const textureLoader=new THREE.TextureLoader();
+
+const textureFiles={
+
+ suit:'male_casualsuit03_diffuse.png',
+
+ normal:'male_casualsuit03_normal.png',
+
+ body:'middleage_lightskinned_male_diffuse2.png',
+
+ hair:'short02_diffuse.png',
+
+ shoes:'shoes05_diffuse.png',
+
+ eyes:'brown_eye.png',
+
+ eyebrow:'eyebrow004.png',
+
+ eyelashes:'eyelashes01.png',
+
+ teeth:'teeth.png',
+
+ tongue:'tongue01_diffuse.png'
+
+};
+
+const textures={};
+
+const textureErrors=[];
+
+async function loadTexture(name,file){
+
+ try{
+
+  const texture=await textureLoader.loadAsync(file);
+
+  texture.flipY=false;
+
+  if(name==='normal'){
+
+   texture.colorSpace=THREE.NoColorSpace;
+
+  }else{
+
+   texture.colorSpace=THREE.SRGBColorSpace;
+
+  }
+
+  texture.wrapS=THREE.RepeatWrapping;
+  texture.wrapT=THREE.RepeatWrapping;
+
+  texture.generateMipmaps=true;
+  texture.minFilter=THREE.LinearMipmapLinearFilter;
+  texture.magFilter=THREE.LinearFilter;
+
+  texture.anisotropy=renderer.capabilities.getMaxAnisotropy();
+
+  textures[name]=texture;
+
+  console.log('[TEXTURE OK]',name,file);
+
+  return true;
+
+ }catch(error){
+
+  textureErrors.push(file);
+
+  console.error('[TEXTURE FAILED]',file,error);
+
+  return false;
+
+ }
+
+}
+
+async function loadAllTextures(){
+
+ const entries=Object.entries(textureFiles);
+
+ let success=0;
+
+ const results=await Promise.all(
+  entries.map(async([name,file])=>{
+
+   const result=await loadTexture(name,file);
+
+   if(result)success++;
+
+   return result;
+
+  })
+ );
+
+ console.log(
+  'Textures loaded:',
+  success+'/'+entries.length
+ );
+
+ return success;
+
+}
+
+// =====================================================
+// 7. MATERIAL DETECTION
+// =====================================================
+
+function normalizeName(name){
+
+ return String(name||'')
+  .toLowerCase()
+  .replace(/[^a-z0-9]/g,'');
+
+}
+
+function detectMaterial(meshName,materialName){
+
+ const n=normalizeName(
+  meshName+' '+materialName
+ );
+
+ // Clothing
+ if(
+  /suit|jacket|coat|shirt|trouser|pants|clothes|cloth|tie/.test(n)
+ ){
+  return 'suit';
+ }
+
+ // Shoes
+ if(
+  /shoe|shoes|boot|footwear/.test(n)
+ ){
+  return 'shoes';
+ }
+
+ // Hair
+ if(
+  /hair|hairstyle/.test(n)
+ ){
+  return 'hair';
+ }
+
+ // Eyebrows
+ if(
+  /eyebrow|brow/.test(n)
+ ){
+  return 'eyebrow';
+ }
+
+ // Eyelashes
+ if(
+  /eyelash|lash/.test(n)
+ ){
+  return 'eyelashes';
+ }
+
+ // Teeth
+ if(
+  /teeth|tooth/.test(n)
+ ){
+  return 'teeth';
+ }
+
+ // Tongue
+ if(
+  /tongue/.test(n)
+ ){
+  return 'tongue';
+ }
+
+ // Eyes
+ if(
+  /eyeball|eye/.test(n)
+ ){
+  return 'eyes';
+ }
+
+ // Body / skin
+ if(
+  /skin|body|face|head|arm|hand|neck|leg|foot/.test(n)
+ ){
+  return 'body';
+ }
+
+ return null;
+
+}
+
+// =====================================================
+// 8. SAFE MATERIAL SYSTEM
+// =====================================================
+
+function fixMaterial(mat,meshName){
+
+ if(!mat)return;
+
+ const materialName=mat.name||'';
+
+ const detected=detectMaterial(
+  meshName,
+  materialName
+ );
+
+ // Reset black material tint.
+ // White allows the PNG diffuse texture to show correctly.
+
+ if(mat.color){
+  mat.color.set(0xffffff);
+ }
+
+ if(mat.emissive){
+  mat.emissive.set(0x000000);
+ }
+
+ if(mat.metalness!==undefined){
+  mat.metalness=0;
+ }
+
+ if(mat.roughness!==undefined){
+  mat.roughness=0.85;
+ }
+
+ // Assign detected texture
+
+ if(detected&&textures[detected]){
+
+  mat.map=textures[detected];
+
+  console.log(
+   '[MATERIAL]',
+   meshName,
+   materialName,
+   '=>',
+   detected
+  );
+
+ }else{
+
+  console.warn(
+   '[MATERIAL NOT DETECTED]',
+   meshName,
+   materialName
+  );
+
+ }
+
+ // Normal map only on clothing
+
+ if(detected==='suit'&&textures.normal){
+
+  mat.normalMap=textures.normal;
+
+  if(mat.normalScale){
+   mat.normalScale.set(1,1);
+  }
+
+ }
+
+ // Alpha cutout for hair cards and eyelashes
+
+ if(detected==='hair'||detected==='eyelashes'){
+
+  mat.transparent=false;
+  mat.alphaTest=0.1;
+
+ }
+
+ mat.side=THREE.DoubleSide;
+ mat.needsUpdate=true;
+
+}
+
+// =====================================================
+// 9. APPLY TEXTURES TO FBX
+// =====================================================
+
+function applyTextures(model){
+
+ const report=[];
+
+ model.traverse(obj=>{
+
+  if(!obj.isMesh)return;
+
+  obj.castShadow=true;
+  obj.receiveShadow=true;
+
+  const materials=Array.isArray(obj.material)
+   ?obj.material:[obj.material];
+
+  materials.forEach(mat=>{
+
+   fixMaterial(mat,obj.name);
+
+   report.push({
+
+    mesh:obj.name,
+
+    material:mat?.name||'Unnamed',
+
+    detected:detectMaterial(
+     obj.name,
+     mat?.name
+    )||'UNKNOWN'
+
+   });
+
+  });
+
+ });
+
+ console.table(report);
+
+}
+
+// =====================================================
+// 10. CHARACTER ROOT
+// =====================================================
+
+const characterRoot=new THREE.Group();
+
+scene.add(characterRoot);
+
+const visualRoot=new THREE.Group();
+
+characterRoot.add(visualRoot);
+
+let character=null;
+
+let mixer=null;
+
+let idleAction=null;
+let walkAction=null;
+
+let currentAction=null;
+
+let characterLoaded=false;
+
+// =====================================================
+// 11. MODEL NORMALIZATION
+// =====================================================
+
+function prepareCharacter(model){
+
+ applyTextures(model);
+
+ const initialBox=new THREE.Box3().setFromObject(model);
+
+ const size=initialBox.getSize(
+  new THREE.Vector3()
+ );
+
+ if(size.y<=0){
+  throw new Error('FBX height invalid');
+ }
+
+ const scale=CONFIG.characterHeight/size.y;
+
+ model.scale.setScalar(scale);
+
+ const box=new THREE.Box3().setFromObject(model);
+
+ const center=box.getCenter(new THREE.Vector3());
+
+ model.position.x-=center.x;
+ model.position.z-=center.z;
+ model.position.y-=box.min.y;
+
+ model.rotation.y=CONFIG.modelForwardOffset;
+
+ visualRoot.add(model);
+
+ character=model;
+
+ console.log('MODEL HEIGHT:',size.y);
+ console.log('MODEL SCALE:',scale);
+
+}
+
+// =====================================================
+// 12. MIXAMO IN-PLACE WALK
+// =====================================================
+
+function createInPlaceAnimation(original){
+
+ const clip=original.clone();
+
+ const hipsTrack=clip.tracks.find(track=>
+  normalizeName(track.name)==='mixamorighipsposition'
+ );
+
+ if(hipsTrack){
+
+  const values=hipsTrack.values;
+
+  const firstX=values[0];
+  const firstZ=values[2];
+
+  for(let i=0;i<values.length;i+=3){
+
+   values[i]=firstX;
+   values[i+2]=firstZ;
+
+  }
+
+ }
+
+ // Keep all bone rotations.
+ // Preserve vertical hip movement.
+
+ clip.resetDuration();
+
+ return clip;
+
+}
+
+// =====================================================
+// 13. ANIMATION CONTROLLER
+// =====================================================
+
+function playAnimation(action){
+
+ if(!action||currentAction===action)return;
+
+ const previous=currentAction;
+
+ action.enabled=true;
+ action.reset();
+ action.setEffectiveWeight(1);
+ action.setEffectiveTimeScale(1);
+ action.play();
+
+ if(previous){
+
+  previous.crossFadeTo(
+   action,
+   CONFIG.animationFade,
+   false
+  );
+
+ }
+
+ currentAction=action;
+
+}
+
+// =====================================================
+// 14. LOAD CHARACTER AND ANIMATIONS
+// =====================================================
+
+const fbxLoader=new FBXLoader();
+
+async function loadCharacter(){
+
+ try{
+
+  loadingMessage('PNG teksturalar yuklanmoqda...');
+
+  const textureCount=await loadAllTextures();
+
+  if(textureCount===0){
+
+   throw new Error(
+    'Hech qanday PNG yuklanmadi. Papka manzillarini tekshiring.'
+   );
+
+  }
+
+  if(textureErrors.length){
+
+   showError(
+    'Yuklanmagan teksturalar: '+textureErrors.join(', ')
+   );
+
+  }
+
+  loadingMessage('Idle FBX yuklanmoqda...');
+
+  const idleModel=await fbxLoader.loadAsync(
+   'idle.fbx'
+  );
+
+  prepareCharacter(idleModel);
+
+  mixer=new THREE.AnimationMixer(character);
+
+  if(idleModel.animations.length){
+
+   idleAction=mixer.clipAction(
+    idleModel.animations[0],
+    character
+   );
+
+   idleAction.setLoop(THREE.LoopRepeat);
+   idleAction.play();
+
+   currentAction=idleAction;
+
+  }
+
+  loadingMessage('Walk animatsiyasi yuklanmoqda...');
+
+  const walkModel=await fbxLoader.loadAsync(
+   'standartwalk.fbx'
+  );
+
+  if(walkModel.animations.length){
+
+   const clip=createInPlaceAnimation(
+    walkModel.animations[0]
+   );
+
+   walkAction=mixer.clipAction(
+    clip,
+    character
+   );
+
+   walkAction.setLoop(THREE.LoopRepeat);
+   walkAction.clampWhenFinished=false;
+
+  }
+
+  console.log('IDLE TRACKS');
+  console.table(
+   idleModel.animations[0]?.tracks.map(t=>t.name)
+  );
+
+  console.log('WALK TRACKS');
+  console.table(
+   walkModel.animations[0]?.tracks.map(t=>t.name)
+  );
+
+  characterLoaded=true;
+
+  loadingMessage('Character tayyor!');
+
+  setTimeout(()=>{
+
+   $('loading').style.display='none';
+   $('start').style.display='flex';
+
+  },300);
+
+ }catch(error){
+
+  console.error('CHARACTER ERROR:',error);
+
+  loadingMessage('Yuklashda xatolik!');
+  showError(error.message);
+
+ }
+
+}
+
+await loadCharacter();
+
+// =====================================================
+// 15. INPUT
+// =====================================================
+
+const keys={};
+
+window.addEventListener('keydown',e=>{
+
+ keys[e.code]=true;
+
+ if(e.code==='Space'){
+  e.preventDefault();
+ }
+
+});
+
+window.addEventListener('keyup',e=>{
+ keys[e.code]=false;
+});
+
+window.addEventListener('blur',()=>{
+ for(const key in keys)keys[key]=false;
+});
+
+// =====================================================
+// 16. START GAME
+// =====================================================
+
+let started=false;
+
+$('startBtn').onclick=()=>{
+
+ if(!characterLoaded)return;
+
+ started=true;
+
+ $('start').style.display='none';
+
+ renderer.domElement.requestPointerLock();
+
+};
+
+renderer.domElement.addEventListener('click',()=>{
+
+ if(started&&!document.pointerLockElement){
+  renderer.domElement.requestPointerLock();
+ }
+
+});
+
+// =====================================================
+// 17. CAMERA
+// =====================================================
+
+let yaw=0;
+let pitch=0.08;
+
+let cameraReady=false;
+
+window.addEventListener('mousemove',e=>{
+
+ if(!document.pointerLockElement)return;
+
+ yaw-=e.movementX*CONFIG.cameraSensitivity;
+
+ pitch-=e.movementY*CONFIG.cameraSensitivity;
+
+ pitch=THREE.MathUtils.clamp(
+  pitch,
+  CONFIG.minPitch,
+  CONFIG.maxPitch
+ );
+
+});
+
+// =====================================================
+// 18. MOVEMENT
+// =====================================================
+
+const velocity=new THREE.Vector3();
+const desiredVelocity=new THREE.Vector3();
+
+const forward=new THREE.Vector3();
+const right=new THREE.Vector3();
+
+const inputDirection=new THREE.Vector3();
+
+const clock=new THREE.Clock();
+
+let verticalVelocity=0;
+let grounded=true;
+
+let movementState='IDLE';
+
+function smoothAngle(current,target,dt){
+
+ const diff=Math.atan2(
+  Math.sin(target-current),
+  Math.cos(target-current)
+ );
+
+ return current+
+ diff*(1-Math.exp(-CONFIG.turnSpeed*dt));
+
+}
+
+// =====================================================
+// 19. CHARACTER MOVEMENT UPDATE
+// =====================================================
+
+function updateMovement(dt){
+
+ let f=0;
+ let s=0;
+
+ if(keys.KeyW||keys.ArrowUp)f++;
+ if(keys.KeyS||keys.ArrowDown)f--;
+
+ if(keys.KeyD||keys.ArrowRight)s++;
+ if(keys.KeyA||keys.ArrowLeft)s--;
+
+ const hasInput=f!==0||s!==0;
+
+ const sprint=!!(
+  keys.ShiftLeft||keys.ShiftRight
+ );
+
+ forward.set(
+  Math.sin(yaw),0,-Math.cos(yaw)
+ );
+
+ right.set(
+  Math.cos(yaw),0,Math.sin(yaw)
+ );
+
+ inputDirection.set(0,0,0);
+
+ inputDirection.addScaledVector(forward,f);
+ inputDirection.addScaledVector(right,s);
+
+ if(inputDirection.lengthSq()>0){
+  inputDirection.normalize();
+ }
+
+ const speed=sprint
+  ?CONFIG.sprintSpeed
+  :CONFIG.walkSpeed;
+
+ desiredVelocity.copy(inputDirection)
+  .multiplyScalar(hasInput?speed:0);
+
+ const acceleration=hasInput
+  ?CONFIG.acceleration
+  :CONFIG.deceleration;
+
+ velocity.lerp(
+  desiredVelocity,
+  1-Math.exp(-acceleration*dt)
+ );
+
+ if(velocity.length()<0.02&&!hasInput){
+  velocity.set(0,0,0);
+ }
+
+ // ONLY controller changes world position.
+ // Walk animation does not translate the character.
+
+ characterRoot.position.x+=velocity.x*dt;
+ characterRoot.position.z+=velocity.z*dt;
+
+ // Character rotation
+
+ if(hasInput){
+
+  const angle=Math.atan2(
+   inputDirection.x,
+   inputDirection.z
+  );
+
+  characterRoot.rotation.y=smoothAngle(
+   characterRoot.rotation.y,
+   angle,
+   dt
+  );
+
+ }
+
+ // Jump physics
+
+ if(keys.Space&&grounded){
+
+  verticalVelocity=CONFIG.jumpForce;
+  grounded=false;
+
+ }
+
+ verticalVelocity-=CONFIG.gravity*dt;
+
+ characterRoot.position.y+=verticalVelocity*dt;
+
+ if(characterRoot.position.y<=0){
+
+  characterRoot.position.y=0;
+  verticalVelocity=0;
+  grounded=true;
+
+ }
+
+ // Animation state
+
+ const actualSpeed=velocity.length();
+
+ if(actualSpeed>0.15){
+
+  playAnimation(walkAction);
+
+  if(walkAction){
+
+   const ratio=actualSpeed/CONFIG.walkSpeed;
+
+   walkAction.timeScale=THREE.MathUtils.clamp(
+    ratio*CONFIG.walkAnimationSpeed,
+    0.7,
+    CONFIG.sprintAnimationSpeed
+   );
+
+  }
+
+  movementState=sprint?'SPRINT':'WALK';
+
+ }else{
+
+  playAnimation(idleAction);
+
+  if(idleAction){
+   idleAction.timeScale=1;
+  }
+
+  movementState='IDLE';
+
+ }
+
+}
+
+// =====================================================
+// 20. CAMERA FOLLOW
+// =====================================================
+
+const cameraTarget=new THREE.Vector3();
+const cameraPosition=new THREE.Vector3();
+
+function updateCamera(dt){
+
+ cameraTarget.set(
+  characterRoot.position.x,
+  characterRoot.position.y+
+   CONFIG.cameraTargetHeight,
+  characterRoot.position.z
+ );
+
+ const distance=
+  CONFIG.cameraDistance*Math.cos(pitch);
+
+ cameraPosition.set(
+
+  cameraTarget.x+Math.sin(yaw)*distance,
+
+  cameraTarget.y+
+   CONFIG.cameraHeight+
+   CONFIG.cameraDistance*Math.sin(pitch),
+
+  cameraTarget.z+Math.cos(yaw)*distance
+
+ );
+
+ cameraPosition.y=Math.max(0.4,cameraPosition.y);
+
+ const smooth=1-Math.exp(
+  -CONFIG.cameraSmooth*dt
+ );
+
+ if(!cameraReady){
+
+  camera.position.copy(cameraPosition);
+  cameraReady=true;
+
+ }else{
+
+  camera.position.lerp(cameraPosition,smooth);
+
+ }
+
+ camera.lookAt(cameraTarget);
+
+}
+
+// =====================================================
+// 21. GAME LOOP
+// =====================================================
+
+function animate(){
+
+ requestAnimationFrame(animate);
+
+ const dt=Math.min(clock.getDelta(),0.033);
+
+ if(mixer){
+  mixer.update(dt);
+ }
+
+ if(started&&characterLoaded){
+
+  updateMovement(dt);
+  updateCamera(dt);
+
+  $('status').innerHTML=
+   '<span id="statusDot"></span>'+movementState;
+
+ }
+
+ renderer.render(scene,camera);
+
+}
+
+animate();
+
+// =====================================================
+// 22. RESIZE
+// =====================================================
+
+window.addEventListener('resize',()=>{
+
+ camera.aspect=innerWidth/innerHeight;
+
+ camera.updateProjectionMatrix();
+
+ renderer.setSize(innerWidth,innerHeight);
+
+});
+
+</script>
+</body>
+</html>
+
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Open World - Third Person</title>
 
 <style>
