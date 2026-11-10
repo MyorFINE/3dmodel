@@ -1,233 +1,540 @@
+
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Third-Person Game</title>
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background-color: #1a1a1a;
-            font-family: sans-serif;
-        }
-        #info {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: white;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 10px;
-            border-radius: 5px;
-            pointer-events: none;
-        }
-    </style>
-    <!-- Three.js va zaruriy kutubxonalar -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/fflate.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Third Person Character Demo</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+ overflow:hidden;
+ background:#111;
+ font-family:Arial,sans-serif;
+}
+canvas{display:block}
+#loading{
+ position:fixed;inset:0;background:#111;
+ color:white;display:flex;align-items:center;
+ justify-content:center;z-index:10;
+ flex-direction:column;gap:15px;
+}
+#loading small{color:#aaa}
+#crosshair{
+ position:fixed;left:50%;top:50%;
+ transform:translate(-50%,-50%);
+ color:white;font-size:18px;
+ pointer-events:none;opacity:.7;
+}
+#info{
+ position:fixed;left:20px;top:20px;
+ color:white;background:#0009;
+ padding:14px 18px;border-radius:8px;
+ font-size:13px;line-height:1.8;
+ pointer-events:none;
+}
+#status{
+ position:fixed;right:20px;top:20px;
+ color:#fff;background:#0009;
+ padding:12px 18px;border-radius:8px;
+ font-size:13px;
+}
+#start{
+ position:fixed;inset:0;z-index:5;
+ display:flex;align-items:center;justify-content:center;
+ background:#0008;
+}
+#start button{
+ border:1px solid #888;background:#171717;
+ color:white;padding:17px 35px;
+ font-size:16px;border-radius:7px;
+ cursor:pointer;
+}
+#start button:hover{background:#333}
+</style>
 </head>
+
 <body>
 
-    <div id="info">
-        <h3>O'yin Boshqaruvi:</h3>
-        <p><b>W, A, S, D</b> - Yurish</p>
-        <p><b>Sichqoncha</b> - Kamerani aylantirish</p>
-    </div>
+<div id="loading">
+ <h2>PERSONAJ YUKLANMOQDA</h2>
+ <small id="loadText">3D model va teksturalar tayyorlanmoqda...</small>
+</div>
 
-    <script>
-        let scene, camera, renderer;
-        let model, mixer;
-        let walkAction;
-        let clock = new THREE.Clock();
+<div id="start">
+ <button id="startBtn">O'YINNI BOSHLASH</button>
+</div>
 
-        const keys = { w: false, a: false, s: false, d: false };
+<div id="info">
+ <b>THIRD PERSON CONTROLLER</b><br>
+ W A S D — Harakatlanish<br>
+ SHIFT — Tez yurish<br>
+ MOUSE — Kamera<br>
+ ESC — Sichqonchani bo'shatish
+</div>
 
-        // Kamera va personaj burchaklarini boshqarish uchun
-        let cameraAngle = 0;
-        let cameraRadius = 3.5; // Personajdan qanchalik uzoqligi
-        let cameraHeight = 1.8; // Kameraning balandligi
+<div id="status">Holat: IDLE</div>
+<div id="crosshair">+</div>
 
-        function init() {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0xa0a0a0);
-            scene.fog = new THREE.Fog(0xa0a0a0, 20, 100);
+<script type="importmap">
+{
+ "imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+ }
+}
+</script>
 
-            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+<script type="module">
+import * as THREE from 'three';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 
-            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
-            hemiLight.position.set(0, 50, 0);
-            scene.add(hemiLight);
+const $ = id => document.getElementById(id);
 
-            const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-            dirLight.position.set(10, 50, 10);
-            dirLight.castShadow = true;
-            scene.add(dirLight);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9caab8);
+scene.fog = new THREE.Fog(0x9caab8, 20, 90);
 
-            // Yer tekisligi
-            const mesh = new THREE.Mesh(
-                new THREE.PlaneGeometry(200, 200),
-                new THREE.MeshPhongMaterial({ color: 0x999999, depthWrite: false })
-            );
-            mesh.rotation.x = -Math.PI / 2;
-            mesh.receiveShadow = true;
-            scene.add(mesh);
+const camera = new THREE.PerspectiveCamera(
+ 65, window.innerWidth/window.innerHeight, 0.1, 500
+);
 
-            const grid = new THREE.GridHelper(200, 100, 0x000000, 0x000000);
-            grid.material.opacity = 0.2;
-            grid.material.transparent = true;
-            scene.add(grid);
+const renderer = new THREE.WebGLRenderer({
+ antialias:true,
+ powerPreference:'high-performance'
+});
 
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
-            document.body.appendChild(renderer.domElement);
+renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.1;
+document.body.appendChild(renderer.domElement);
 
-            // Teksturalarni yuklash
-            const textureLoader = new THREE.TextureLoader();
-            const textures = {
-                body: textureLoader.load('middleage_lightskinned_male_diffuse2.png'),
-                suit: textureLoader.load('male_casualsuit03_diffuse.png'),
-                shoes: textureLoader.load('shoes05_diffuse.png'),
-                shorts: textureLoader.load('short02_diffuse.png'),
-                eyes: textureLoader.load('brown_eye.png'),
-                teeth: textureLoader.load('teeth.png'),
-                tongue: textureLoader.load('tongue01_diffuse.png')
-            };
+// LIGHTING
+scene.add(new THREE.HemisphereLight(0xffffff,0x555566,2));
 
-            const loader = new THREE.FBXLoader();
-            loader.load('standartwalk.fbx', function (object) {
-                model = object;
-                
-                // MASSHTABNI TO'G'RI TAYINLAYMIZ (Mixamo modellari uchun odatda 1 yoki 0.01 bo'ladi, 1 qilib ko'ramiz)
-                model.scale.setScalar(1.0); 
+const sunlight=new THREE.DirectionalLight(0xffffff,3);
+sunlight.position.set(-8,15,10);
+sunlight.castShadow=true;
+sunlight.shadow.mapSize.set(2048,2048);
+sunlight.shadow.camera.left=-15;
+sunlight.shadow.camera.right=15;
+sunlight.shadow.camera.top=15;
+sunlight.shadow.camera.bottom=-15;
+scene.add(sunlight);
 
-                model.traverse(function (child) {
-                    if (child.isMesh) {
-                        child.castShadow = true;
-                        child.receiveShadow = true;
+// GROUND
+const ground=new THREE.Mesh(
+ new THREE.PlaneGeometry(300,300),
+ new THREE.MeshStandardMaterial({
+  color:0x66705d,
+  roughness:1
+ })
+);
+ground.rotation.x=-Math.PI/2;
+ground.receiveShadow=true;
+scene.add(ground);
 
-                        const matName = child.material.name ? child.material.name.toLowerCase() : '';
-                        const meshName = child.name ? child.name.toLowerCase() : '';
+// GRID
+const grid=new THREE.GridHelper(300,100,0x777777,0x888888);
+grid.position.y=0.015;
+grid.material.transparent=true;
+grid.material.opacity=0.12;
+scene.add(grid);
 
-                        if ((matName.includes('shoe') || meshName.includes('shoe')) && textures.shoes) {
-                            child.material.map = textures.shoes;
-                        } else if ((matName.includes('short') || meshName.includes('short')) && textures.shorts) {
-                            child.material.map = textures.shorts;
-                        } else if ((matName.includes('suit') || matName.includes('body') || meshName.includes('body')) && textures.suit) {
-                            child.material.map = textures.suit;
-                        } else if ((matName.includes('eye') || meshName.includes('eye')) && textures.eyes) {
-                            child.material.map = textures.eyes;
-                        } else if ((matName.includes('teeth') || meshName.includes('teeth')) && textures.teeth) {
-                            child.material.map = textures.teeth;
-                        } else if ((matName.includes('tongue') || meshName.includes('tongue')) && textures.tongue) {
-                            child.material.map = textures.tongue;
-                        } else if (textures.body) {
-                            child.material.map = textures.body;
-                        }
+// TEXTURE LOADER
+const textureLoader=new THREE.TextureLoader();
 
-                        child.material.needsUpdate = true;
-                    }
-                });
+function loadTexture(name){
+ const t=textureLoader.load(name);
+ t.colorSpace=THREE.SRGBColorSpace;
+ t.flipY=false;
+ return t;
+}
 
-                if (object.animations && object.animations.length > 0) {
-                    mixer = new THREE.AnimationMixer(model);
-                    walkAction = mixer.clipAction(object.animations[0]);
-                }
+const textures={
+ suit:loadTexture('male_casualsuit03_diffuse.png'),
+ normal:loadTexture('male_casualsuit03_normal.png'),
+ body:loadTexture('middleage_lightskinned_male_diffuse2.png'),
+ hair:loadTexture('short02_diffuse.png'),
+ shoes:loadTexture('shoes05_diffuse.png'),
+ eyes:loadTexture('brown_eye.png'),
+ eyebrows:loadTexture('eyebrow004.png'),
+ eyelashes:loadTexture('eyelashes01.png'),
+ teeth:loadTexture('teeth.png'),
+ tongue:loadTexture('tongue01_diffuse.png')
+};
 
-                scene.add(model);
-            }, undefined, function (error) {
-                console.error("FBX yuklashda xatolik:", error);
-            });
+// CHARACTER
+const fbxLoader=new FBXLoader();
 
-            window.addEventListener('resize', onWindowResize);
-            window.addEventListener('keydown', (e) => handleKey(e, true));
-            window.addEventListener('keyup', (e) => handleKey(e, false));
+let character=null;
+let mixer=null;
+let idleAction=null;
+let walkAction=null;
+let currentAction=null;
 
-            // Sichqoncha orqali kamerani aylantirish
-            let isMouseDown = false;
-            window.addEventListener('mousedown', () => isMouseDown = true);
-            window.addEventListener('mouseup', () => isMouseDown = false);
-            window.addEventListener('mousemove', (e) => {
-                if (isMouseDown) {
-                    cameraAngle -= e.movementX * 0.005;
-                }
-            });
+const characterRoot=new THREE.Group();
+scene.add(characterRoot);
 
-            animate();
-        }
+let modelHeight=1.8;
 
-        function handleKey(event, isPressed) {
-            const key = event.key.toLowerCase();
-            if (keys.hasOwnProperty(key)) {
-                keys[key] = isPressed;
-            }
-        }
+function getMaterialName(material){
+ return (
+  (material.name||'')+' '+
+  (material.map?.name||'')
+ ).toLowerCase();
+}
 
-        function updateMovement(delta) {
-            if (!model) return;
+function setTexture(material,texture){
+ if(!texture)return;
+ material.map=texture;
+ material.needsUpdate=true;
+}
 
-            const moveSpeed = 4.0 * delta;
-            let moving = false;
+function setupCharacter(model){
 
-            // Personaj harakati
-            if (keys.w) {
-                model.position.z -= moveSpeed;
-                model.rotation.y = Math.PI; // Oldinga qarash
-                moving = true;
-            }
-            if (keys.s) {
-                model.position.z += moveSpeed;
-                model.rotation.y = 0; // Orqaga qarash
-                moving = true;
-            }
-            if (keys.a) {
-                model.position.x -= moveSpeed;
-                model.rotation.y = -Math.PI / 2; // Chapga
-                moving = true;
-            }
-            if (keys.d) {
-                model.position.x += moveSpeed;
-                model.rotation.y = Math.PI / 2; // O'ngga
-                moving = true;
-            }
+ model.traverse(obj=>{
+  if(!obj.isMesh)return;
 
-            // Animatsiyani boshqarish
-            if (walkAction) {
-                if (moving) {
-                    if (!walkAction.isRunning()) walkAction.play();
-                } else {
-                    if (walkAction.isRunning()) walkAction.stop();
-                }
-            }
+  obj.castShadow=true;
+  obj.receiveShadow=true;
 
-            // KAMERA HARAKATI (Har doim personaj ortida turadi - haqiqiy 3rd person)
-            camera.position.x = model.position.x + Math.sin(cameraAngle) * cameraRadius;
-            camera.position.z = model.position.z + Math.cos(cameraAngle) * cameraRadius;
-            camera.position.y = model.position.y + cameraHeight;
+  const materials=Array.isArray(obj.material)
+   ?obj.material:[obj.material];
 
-            // Kamera doimo personajning boshiga qaraydi
-            camera.lookAt(model.position.x, model.position.y + 1.2, model.position.z);
-        }
+  materials.forEach(mat=>{
+   if(!mat)return;
 
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
+   const name=(obj.name+' '+getMaterialName(mat)).toLowerCase();
 
-        function animate() {
-            requestAnimationFrame(animate);
-            const delta = clock.getDelta();
+   if(/shoe|boot|footwear/.test(name)){
+    setTexture(mat,textures.shoes);
+   }
+   else if(/hair|headhair/.test(name)){
+    setTexture(mat,textures.hair);
+   }
+   else if(/brow/.test(name)){
+    setTexture(mat,textures.eyebrows);
+   }
+   else if(/lash/.test(name)){
+    setTexture(mat,textures.eyelashes);
+   }
+   else if(/eye/.test(name)){
+    setTexture(mat,textures.eyes);
+   }
+   else if(/teeth/.test(name)){
+    setTexture(mat,textures.teeth);
+   }
+   else if(/tongue/.test(name)){
+    setTexture(mat,textures.tongue);
+   }
+   else if(/skin|body|face|head|arm|hand|neck|leg/.test(name)){
+    setTexture(mat,textures.body);
+   }
+   else if(/suit|shirt|coat|jacket|trouser|pants|clothes/.test(name)){
+    setTexture(mat,textures.suit);
+    mat.normalMap=textures.normal;
+   }
 
-            if (mixer) mixer.update(delta);
-            updateMovement(delta);
+   mat.side=THREE.DoubleSide;
+   mat.needsUpdate=true;
+  });
+ });
 
-            renderer.render(scene, camera);
-        }
+ // Normalize model size and center
+ const box=new THREE.Box3().setFromObject(model);
+ const size=box.getSize(new THREE.Vector3());
+ const center=box.getCenter(new THREE.Vector3());
 
-        init();
-    </script>
+ const height=size.y || 1.8;
+ const scale=1.8/height;
+
+ model.scale.setScalar(scale);
+
+ // Recalculate bounds after scaling
+ const scaledBox=new THREE.Box3().setFromObject(model);
+ const scaledCenter=scaledBox.getCenter(new THREE.Vector3());
+
+ model.position.x-=scaledCenter.x;
+ model.position.z-=scaledCenter.z;
+ model.position.y-=scaledBox.min.y;
+
+ modelHeight=1.8;
+
+ characterRoot.add(model);
+ character=model;
+}
+
+// ANIMATION
+function playAction(action,fade=0.2){
+
+ if(!action)return;
+ if(currentAction===action)return;
+
+ if(currentAction){
+  currentAction.fadeOut(fade);
+ }
+
+ action.reset();
+ action.fadeIn(fade);
+ action.play();
+
+ currentAction=action;
+}
+
+// LOAD FBX
+async function loadCharacter(){
+
+ try{
+
+  $('loadText').textContent='Idle model yuklanmoqda...';
+
+  // Idle FBX asosiy model bo'ladi
+  const idleModel=await fbxLoader.loadAsync('idle.fbx');
+
+  setupCharacter(idleModel);
+
+  mixer=new THREE.AnimationMixer(character);
+
+  if(idleModel.animations.length){
+   idleAction=mixer.clipAction(idleModel.animations[0]);
+   idleAction.play();
+   currentAction=idleAction;
+  }
+
+  $('loadText').textContent='Walk animatsiyasi yuklanmoqda...';
+
+  // Walk FBX dan animatsiya olinadi
+  const walkModel=await fbxLoader.loadAsync('standartwalk.fbx');
+
+  if(walkModel.animations.length){
+
+   const walkClip=walkModel.animations[0];
+
+   // Track nomlarini tekshirish uchun:
+   console.log('Walk animation:',walkClip.name);
+   console.log('Walk tracks:',walkClip.tracks.map(t=>t.name));
+
+   walkAction=mixer.clipAction(walkClip);
+  }
+
+  if(!idleAction && idleModel.animations.length===0){
+   console.warn('Idle animatsiyasi topilmadi!');
+  }
+
+  if(!walkAction){
+   console.warn('Walk animatsiyasi topilmadi!');
+  }
+
+  $('loading').style.display='none';
+
+ }catch(error){
+
+  console.error(error);
+
+  $('loadText').textContent=
+   'XATOLIK: '+error.message+
+   ' | FBX fayllarini tekshiring.';
+
+ }
+}
+
+await loadCharacter();
+
+// CHARACTER MOVEMENT
+const keys={};
+
+window.addEventListener('keydown',e=>{
+ keys[e.code]=true;
+
+ if(['Space','ArrowUp','ArrowDown'].includes(e.code)){
+  e.preventDefault();
+ }
+});
+
+window.addEventListener('keyup',e=>{
+ keys[e.code]=false;
+});
+
+window.addEventListener('blur',()=>{
+ Object.keys(keys).forEach(k=>keys[k]=false);
+});
+
+// CAMERA CONTROLLER
+let cameraYaw=0;
+let cameraPitch=0.12;
+
+const cameraDistance=3.4;
+const cameraHeight=1.0;
+
+let cameraPosition=new THREE.Vector3();
+let cameraTarget=new THREE.Vector3();
+
+const mouseSensitivity=0.0025;
+
+renderer.domElement.addEventListener('click',()=>{
+ if(started && !document.pointerLockElement){
+  renderer.domElement.requestPointerLock();
+ }
+});
+
+document.addEventListener('mousemove',e=>{
+
+ if(!document.pointerLockElement)return;
+
+ cameraYaw-=e.movementX*mouseSensitivity;
+ cameraPitch-=e.movementY*mouseSensitivity;
+
+ cameraPitch=THREE.MathUtils.clamp(
+  cameraPitch,-0.35,0.75
+ );
+
+});
+
+// START
+let started=false;
+
+$('startBtn').addEventListener('click',()=>{
+ started=true;
+ $('start').style.display='none';
+ renderer.domElement.requestPointerLock();
+});
+
+// MOVEMENT VARIABLES
+const direction=new THREE.Vector3();
+const forward=new THREE.Vector3();
+const right=new THREE.Vector3();
+const moveVector=new THREE.Vector3();
+
+const clock=new THREE.Clock();
+
+const smoothCamera=0.09;
+const moveSpeed=3.0;
+const runSpeed=6.0;
+const rotationSpeed=10;
+
+// ANIMATION LOOP
+function animate(){
+
+ requestAnimationFrame(animate);
+
+ const delta=Math.min(clock.getDelta(),0.05);
+
+ if(mixer){
+  mixer.update(delta);
+ }
+
+ if(character){
+
+  let forwardInput=0;
+  let sideInput=0;
+
+  if(keys['KeyW']||keys['ArrowUp'])forwardInput+=1;
+  if(keys['KeyS']||keys['ArrowDown'])forwardInput-=1;
+  if(keys['KeyA']||keys['ArrowLeft'])sideInput-=1;
+  if(keys['KeyD']||keys['ArrowRight'])sideInput+=1;
+
+  const moving=forwardInput!==0||sideInput!==0;
+  const running=keys['ShiftLeft']||keys['ShiftRight'];
+
+  // Camera-relative movement
+  forward.set(
+   Math.sin(cameraYaw),
+   0,
+   -Math.cos(cameraYaw)
+  );
+
+  right.set(
+   Math.cos(cameraYaw),
+   0,
+   Math.sin(cameraYaw)
+  );
+
+  moveVector.set(0,0,0);
+
+  moveVector.addScaledVector(forward,forwardInput);
+  moveVector.addScaledVector(right,sideInput);
+
+  if(moveVector.lengthSq()>0){
+   moveVector.normalize();
+
+   const speed=running?runSpeed:moveSpeed;
+
+   characterRoot.position.addScaledVector(
+    moveVector,speed*delta
+   );
+
+   // Rotate character toward movement
+   const targetRotation=Math.atan2(
+    moveVector.x,
+    moveVector.z
+   );
+
+   let difference=targetRotation-characterRoot.rotation.y;
+
+   difference=Math.atan2(
+    Math.sin(difference),
+    Math.cos(difference)
+   );
+
+   characterRoot.rotation.y+=difference*
+    Math.min(1,rotationSpeed*delta);
+
+   if(walkAction){
+    playAction(walkAction,0.18);
+    walkAction.timeScale=running?1.4:1.0;
+   }
+  }
+  else{
+   if(idleAction){
+    playAction(idleAction,0.2);
+    idleAction.timeScale=1;
+   }
+  }
+
+  // CAMERA FOLLOWS CHARACTER
+  const target=new THREE.Vector3(
+   characterRoot.position.x,
+   characterRoot.position.y+1.35,
+   characterRoot.position.z
+  );
+
+  const horizontalDistance=
+   cameraDistance*Math.cos(cameraPitch);
+
+  cameraPosition.set(
+   target.x+Math.sin(cameraYaw)*horizontalDistance,
+   target.y+cameraHeight+
+    cameraDistance*Math.sin(cameraPitch),
+   target.z+Math.cos(cameraYaw)*horizontalDistance
+  );
+
+  camera.position.lerp(cameraPosition,smoothCamera);
+  cameraTarget.lerp(target,smoothCamera);
+
+  camera.lookAt(cameraTarget);
+
+  $('status').textContent=
+   'Holat: '+(moving?(running?'RUNNING':'WALK'):'IDLE');
+ }
+
+ renderer.render(scene,camera);
+}
+
+animate();
+
+// RESIZE
+window.addEventListener('resize',()=>{
+ camera.aspect=window.innerWidth/window.innerHeight;
+ camera.updateProjectionMatrix();
+ renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+</script>
 </body>
 </html>
