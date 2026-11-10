@@ -3,67 +3,9 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3D Character World</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Character World 3D</title>
 
-<style>
-*{box-sizing:border-box}
-html,body{
-    margin:0;width:100%;height:100%;
-    overflow:hidden;background:#111;
-    font-family:Arial,sans-serif;
-}
-canvas{display:block;width:100%;height:100%}
-
-#loading{
-    position:fixed;inset:0;z-index:100;
-    display:flex;align-items:center;justify-content:center;
-    flex-direction:column;gap:18px;
-    background:radial-gradient(circle at center,#243344,#080d14);
-    color:white;
-}
-.loader{
-    width:52px;height:52px;border-radius:50%;
-    border:4px solid #ffffff22;
-    border-top-color:#49baff;
-    animation:spin 1s linear infinite;
-}
-@keyframes spin{to{transform:rotate(360deg)}}
-#loadingText{font-size:14px;color:#d8e7f4}
-#loadError{
-    max-width:90%;color:#ff8585;
-    text-align:center;font-size:13px;
-}
-#hud{
-    position:fixed;top:18px;left:18px;
-    color:white;z-index:10;pointer-events:none;
-    text-shadow:0 2px 5px black;
-    font-size:13px;line-height:1.8;
-}
-#crosshair{
-    position:fixed;top:50%;left:50%;
-    transform:translate(-50%,-50%);
-    width:5px;height:5px;border-radius:50%;
-    background:#fff8;pointer-events:none;
-}
-#help{
-    position:fixed;bottom:18px;left:50%;
-    transform:translateX(-50%);
-    color:#fff;background:#101820bb;
-    padding:10px 16px;border-radius:10px;
-    font-size:12px;white-space:nowrap;
-    pointer-events:none;
-}
-#errorPanel{
-    display:none;position:fixed;bottom:65px;left:15px;
-    right:15px;max-height:30vh;overflow:auto;
-    background:#330e0e;color:#ffb4b4;
-    padding:12px;border-radius:8px;font-size:12px;
-    z-index:200;white-space:pre-wrap;
-}
-</style>
-
-<!-- Import map MUST be before module script -->
 <script type="importmap">
 {
   "imports": {
@@ -72,723 +14,732 @@ canvas{display:block;width:100%;height:100%}
   }
 }
 </script>
+
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;font-family:Arial,sans-serif}
+canvas{display:block}
+#loading{
+ position:fixed;inset:0;z-index:1000;
+ display:flex;align-items:center;justify-content:center;
+ flex-direction:column;gap:18px;
+ color:white;background:radial-gradient(circle,#24384c,#080d14);
+}
+.spinner{
+ width:48px;height:48px;border:4px solid #ffffff25;
+ border-top-color:#45b8ff;border-radius:50%;
+ animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loadText{font-size:14px}
+#loadError{color:#ff9999;font-size:12px;max-width:90%;text-align:center}
+#hud{position:fixed;top:15px;left:15px;color:white;font-size:12px;line-height:1.8;text-shadow:0 2px 5px black;pointer-events:none}
+#help{
+ position:fixed;bottom:15px;left:50%;transform:translateX(-50%);
+ background:#101820cc;color:white;padding:10px 15px;
+ border-radius:9px;font-size:12px;white-space:nowrap;
+ pointer-events:none
+}
+#crosshair{
+ position:fixed;top:50%;left:50%;width:5px;height:5px;
+ background:white;border-radius:50%;transform:translate(-50%,-50%);
+ pointer-events:none
+}
+#errorBox{
+ display:none;position:fixed;bottom:65px;left:10px;right:10px;
+ max-height:25vh;overflow:auto;padding:10px;
+ background:#350c0c;color:#ffbaba;font-size:12px;
+ z-index:2000;white-space:pre-wrap
+}
+</style>
 </head>
 
 <body>
 
 <div id="loading">
-    <div class="loader" id="loader"></div>
-    <div id="loadingText">3D dunyo yuklanmoqda...</div>
-    <div id="loadError"></div>
+ <div class="spinner" id="spinner"></div>
+ <div id="loadText">3D dunyo yuklanmoqda...</div>
+ <div id="loadError"></div>
 </div>
 
 <div id="hud">
-    <b>CHARACTER WORLD</b><br>
-    Holat: <span id="state">Yuklanmoqda</span><br>
-    FPS: <span id="fps">0</span>
+ <b>CHARACTER WORLD</b><br>
+ Holat: <span id="gameState">Yuklanmoqda</span><br>
+ FPS: <span id="fps">0</span>
 </div>
 
 <div id="crosshair"></div>
-
-<div id="help">
-    WASD — Harakat | SHIFT — Yugurish | SPACE — Sakrash | Sichqoncha — Kamera
-</div>
-
-<div id="errorPanel"></div>
+<div id="help">WASD — Harakat | SHIFT — Yugurish | SPACE — Sakrash | Sichqoncha — Kamera | Scroll — Zoom</div>
+<div id="errorBox"></div>
 
 <script type="module">
 import * as THREE from "three";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 
-/* =====================================================
-   CONFIGURATION
-===================================================== */
+/* ==========================================
+   SETTINGS
+========================================== */
 
-const CONFIG = {
-    files: {
-        idle: "idle.fbx",
-        walk: "standartwalk.fbx",
+const BASE = new URL("./", location.href);
 
-        textures: {
-            suit: "male_casualsuit03_diffuse.png",
-            normal: "male_casualsuit03_normal.png",
-            body: "middleage_lightskinned_male_diffuse2.png",
-            hair: "short02_diffuse.png",
-            shoes: "shoes05_diffuse.png",
-            eyes: "brown_eye.png",
-            eyebrow: "eyebrow004.png",
-            eyelashes: "eyelashes01.png",
-            teeth: "teeth.png",
-            tongue: "tongue01_diffuse.png"
-        }
-    },
+const FILES = {
+ idle: "idle.fbx",
+ walk: "standartwalk.fbx",
 
-    characterHeight: 1.75,
-
-    movement: {
-        walkSpeed: 2.0,
-        runSpeed: 4.5,
-        jumpSpeed: 5.5,
-        gravity: 15
-    },
-
-    camera: {
-        distance: 4.5,
-        height: 2.15,
-        sensitivity: 0.003,
-        minPitch: -0.45,
-        maxPitch: 0.85
-    },
-
-    // If your character faces the wrong direction, adjust this.
-    modelRotationY: 0,
-
-    // Manual texture mapping:
-    // Add actual FBX material or mesh names here after checking console.
-    // Example: "Body_Material": "body"
-    materialOverrides: {
-        // "Material.001": "body",
-        // "Suit_Material": "suit"
-    },
-
-    meshOverrides: {
-        // "BodyMesh": "body",
-        // "HairMesh": "hair"
-    }
+ textures: {
+  suit: "male_casualsuit03_diffuse.png",
+  normal: "male_casualsuit03_normal.png",
+  body: "middleage_lightskinned_male_diffuse2.png",
+  shoes: "shoes05_diffuse.png",
+  hair: "short02_diffuse.png",
+  eyes: "brown_eye.png",
+  eyebrow: "eyebrow004.png",
+  eyelashes: "eyelashes01.png",
+  teeth: "teeth.png",
+  tongue: "tongue01_diffuse.png"
+ }
 };
 
-/* =====================================================
-   GLOBALS
-===================================================== */
+const SETTINGS = {
+ characterHeight: 1.75,
+ walkSpeed: 2.0,
+ runSpeed: 4.5,
+ jumpSpeed: 5.5,
+ gravity: 15,
+
+ cameraDistance: 4.5,
+ cameraHeight: 1.65,
+ cameraSensitivity: 0.003,
+ minPitch: -0.45,
+ maxPitch: 0.85,
+
+ modelRotationY: 0,
+
+ // Agar material nomlari ma'lum bo'lsa, shu yerga yoz:
+ // "Material.001": "body"
+ materialOverrides: {}
+};
+
+/* ==========================================
+   UI
+========================================== */
 
 const $ = id => document.getElementById(id);
 
+function setLoading(text) {
+ $("loadText").textContent = text;
+ console.log("[LOADING]", text);
+}
+
+function hideLoading() {
+ $("loading").style.display = "none";
+ $("gameState").textContent = "Tayyor";
+}
+
+function fatalError(error) {
+ console.error(error);
+
+ $("spinner").style.display = "none";
+ $("loadText").textContent = "Yuklashda xatolik";
+ $("loadError").textContent = error.message || String(error);
+
+ $("errorBox").style.display = "block";
+ $("errorBox").textContent = error.stack || String(error);
+}
+
+/* ==========================================
+   THREE CORE
+========================================== */
+
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x9db6c9);
-scene.fog = new THREE.Fog(0x9db6c9, 45, 180);
+scene.background = new THREE.Color(0x9cb7ca);
+scene.fog = new THREE.Fog(0x9cb7ca, 70, 230);
 
 const camera = new THREE.PerspectiveCamera(
-    65,
-    innerWidth / innerHeight,
-    0.1,
-    1500
+ 65, innerWidth / innerHeight, 0.1, 1500
 );
 
 const renderer = new THREE.WebGLRenderer({
-    antialias: true,
-    powerPreference: "high-performance"
+ antialias:true,
+ powerPreference:"high-performance"
 });
 
-renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = 1.15;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 document.body.appendChild(renderer.domElement);
 
 const clock = new THREE.Clock();
-const loader = new FBXLoader();
-const textureLoader = new THREE.TextureLoader();
+const fbxLoader = new FBXLoader();
 
 let character = null;
 let mixer = null;
 let idleAction = null;
 let walkAction = null;
-let currentAction = null;
+let activeAction = null;
+
 let ready = false;
-
-const keys = {};
-const velocity = new THREE.Vector3();
-
 let yaw = 0;
 let pitch = 0.12;
+let cameraDistance = SETTINGS.cameraDistance;
+
 let verticalVelocity = 0;
 let grounded = true;
-let cameraDistance = CONFIG.camera.distance;
 
-let fpsFrames = 0;
-let fpsTime = 0;
+const keys = {};
 
-/* =====================================================
-   LOADING SYSTEM
-===================================================== */
+let fpsCounter = 0;
+let fpsElapsed = 0;
 
-function status(message) {
-    $("loadingText").textContent = message;
-    console.log("[LOAD]", message);
-}
-
-function showError(error) {
-    console.error(error);
-
-    $("loader").style.display = "none";
-    $("loadingText").textContent = "Yuklashda xatolik yuz berdi";
-    $("loadError").textContent =
-        error?.message || String(error);
-
-    $("errorPanel").style.display = "block";
-    $("errorPanel").textContent =
-        error?.stack || String(error);
-}
-
-function finishLoading() {
-    ready = true;
-    $("loading").style.display = "none";
-    $("state").textContent = "Tayyor";
-    console.log("GAME READY");
-}
-
-/* =====================================================
-   WORLD
-===================================================== */
+/* ==========================================
+   LIGHTS AND WORLD
+========================================== */
 
 function createWorld() {
-    const hemi = new THREE.HemisphereLight(
-        0xe5f3ff,
-        0x596044,
-        2.0
-    );
-    scene.add(hemi);
+ const hemisphere = new THREE.HemisphereLight(
+  0xe8f4ff,0x62604c,2.1
+ );
+ scene.add(hemisphere);
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.65);
-    scene.add(ambient);
+ const ambient = new THREE.AmbientLight(0xffffff,0.65);
+ scene.add(ambient);
 
-    const sun = new THREE.DirectionalLight(0xfff1d8, 3.0);
-    sun.position.set(-25, 40, 20);
-    sun.castShadow = true;
+ const sun = new THREE.DirectionalLight(0xfff0d8,3);
+ sun.position.set(-25,40,25);
+ sun.castShadow = true;
+ sun.shadow.mapSize.set(2048,2048);
+ sun.shadow.camera.left = -40;
+ sun.shadow.camera.right = 40;
+ sun.shadow.camera.top = 40;
+ sun.shadow.camera.bottom = -40;
+ scene.add(sun);
 
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -35;
-    sun.shadow.camera.right = 35;
-    sun.shadow.camera.top = 35;
-    sun.shadow.camera.bottom = -35;
+ const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(10000,10000),
+  new THREE.MeshStandardMaterial({
+   color:0x637b59,
+   roughness:1
+  })
+ );
+ ground.rotation.x = -Math.PI/2;
+ ground.position.y = -0.03;
+ ground.receiveShadow = true;
+ scene.add(ground);
 
-    scene.add(sun);
-
-    const groundGeometry = new THREE.PlaneGeometry(10000, 10000);
-    const groundMaterial = new THREE.MeshStandardMaterial({
-        color: 0x65785c,
-        roughness: 1
-    });
-
-    const ground = new THREE.Mesh(
-        groundGeometry,
-        groundMaterial
-    );
-
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.02;
-    ground.receiveShadow = true;
-    scene.add(ground);
-
-    const grid = new THREE.GridHelper(
-        200,
-        100,
-        0x536b52,
-        0x71816b
-    );
-    grid.position.y = 0.005;
-    grid.material.transparent = true;
-    grid.material.opacity = 0.15;
-    scene.add(grid);
+ const grid = new THREE.GridHelper(200,100,0x526c4f,0x7b8d70);
+ grid.position.y = 0;
+ grid.material.transparent = true;
+ grid.material.opacity = 0.13;
+ scene.add(grid);
 }
 
-/* =====================================================
-   TEXTURE LOADING
-===================================================== */
+/* ==========================================
+   ROBUST TEXTURE LOADER
+========================================== */
 
 const textures = {};
 
-async function loadTextures() {
-    const entries = Object.entries(CONFIG.files.textures);
+async function loadTexture(name,file) {
+ const url = new URL(file,BASE).href;
 
-    for (const [name, file] of entries) {
-        status("Tekstura yuklanmoqda: " + name);
+ try {
+  console.log("[TEXTURE START]",name,url);
 
-        try {
-            const texture = await textureLoader.loadAsync(file);
+  const response = await fetch(url,{
+   cache:"no-store"
+  });
 
-            texture.flipY = false;
-            texture.colorSpace =
-                name === "normal"
-                    ? THREE.NoColorSpace
-                    : THREE.SRGBColorSpace;
+  if (!response.ok) {
+   throw new Error("HTTP "+response.status+" : "+url);
+  }
 
-            texture.anisotropy =
-                renderer.capabilities.getMaxAnisotropy();
+  const blob = await response.blob();
 
-            textures[name] = texture;
+  if (!blob.size) {
+   throw new Error("Empty image: "+file);
+  }
 
-            console.log("[TEXTURE OK]", name, file);
-        } catch (error) {
-            console.error("[TEXTURE FAILED]", name, file, error);
-            // Missing optional textures should not block character loading.
-        }
-    }
+  const bitmap = await createImageBitmap(blob);
 
-    console.log("Loaded textures:", Object.keys(textures));
+  const texture = new THREE.Texture(bitmap);
+  texture.flipY = false;
+
+  texture.colorSpace =
+   name === "normal"
+    ? THREE.NoColorSpace
+    : THREE.SRGBColorSpace;
+
+  texture.anisotropy =
+   renderer.capabilities.getMaxAnisotropy();
+
+  texture.needsUpdate = true;
+
+  console.log(
+   "[TEXTURE SUCCESS]",
+   name,
+   bitmap.width,
+   bitmap.height
+  );
+
+  return texture;
+
+ } catch(error) {
+  console.error("[TEXTURE FAILED]",name,file,error);
+  return null;
+ }
 }
 
-/* =====================================================
+async function loadAllTextures() {
+ const entries = Object.entries(FILES.textures);
+
+ const results = await Promise.all(
+  entries.map(async ([name,file]) => {
+   const texture = await loadTexture(name,file);
+
+   if(texture) textures[name] = texture;
+
+   return {
+    name,
+    loaded:!!texture
+   };
+  })
+ );
+
+ console.table(results);
+
+ console.log(
+  "Total textures:",
+  Object.keys(textures).length,
+  "/",
+  entries.length
+ );
+}
+
+/* ==========================================
    MATERIAL DETECTION
-===================================================== */
+========================================== */
 
-function detectTexture(meshName, materialName) {
-    const mesh = (meshName || "").toLowerCase();
-    const mat = (materialName || "").toLowerCase();
+function detectTexture(meshName,materialName) {
+ const mesh = (meshName || "").toLowerCase();
+ const mat = (materialName || "").toLowerCase();
+ const combined = mesh+" "+mat;
 
-    const override =
-        CONFIG.materialOverrides[materialName] ||
-        CONFIG.meshOverrides[meshName];
+ const override = SETTINGS.materialOverrides[materialName];
 
-    if (override && textures[override]) {
-        return override;
-    }
+ if(override && textures[override]) {
+  return override;
+ }
 
-    const combined = mesh + " " + mat;
+ if(/shoe|boot|footwear/.test(combined)) return "shoes";
+ if(/hair|hairstyle/.test(combined)) return "hair";
+ if(/eyebrow|brow/.test(combined)) return "eyebrow";
+ if(/eyelash|lash/.test(combined)) return "eyelashes";
+ if(/teeth|tooth/.test(combined)) return "teeth";
+ if(/tongue/.test(combined)) return "tongue";
+ if(/eye|iris|pupil/.test(combined)) return "eyes";
+ if(/suit|jacket|shirt|trouser|pants|cloth|tie/.test(combined)) return "suit";
+ if(/body|skin|face|head|arm|leg|hand|neck|torso/.test(combined)) return "body";
 
-    if (/shoe|boot|sneaker|footwear/.test(combined)) return "shoes";
-    if (/hair|hairstyle/.test(combined)) return "hair";
-    if (/eyebrow|brow/.test(combined)) return "eyebrow";
-    if (/eyelash|lash/.test(combined)) return "eyelashes";
-    if (/teeth|tooth/.test(combined)) return "teeth";
-    if (/tongue/.test(combined)) return "tongue";
-    if (/eye|iris|pupil/.test(combined)) return "eyes";
-    if (/suit|jacket|shirt|trouser|pants|cloth|tie/.test(combined)) return "suit";
-    if (/body|skin|face|head|arm|leg|hand|neck|torso/.test(combined)) return "body";
-
-    return null;
+ return null;
 }
 
-function fixMaterial(material, meshName) {
-    const mats = Array.isArray(material) ? material : [material];
+function prepareMaterial(material,meshName) {
+ const list = Array.isArray(material) ? material : [material];
 
-    return mats.map(mat => {
-        const name = mat.name || "";
-        const textureName = detectTexture(meshName, name);
+ return list.map(mat => {
+  const textureName = detectTexture(meshName,mat.name);
 
-        // Preserve FBX's existing texture if it exists.
-        if (!mat.map && textureName && textures[textureName]) {
-            mat.map = textures[textureName];
-        }
+  if(!mat.color) mat.color = new THREE.Color(0xffffff);
 
-        if (textureName === "suit" && textures.normal && !mat.normalMap) {
-            mat.normalMap = textures.normal;
-            mat.normalScale.set(0.45, 0.45);
-        }
+  // FBX material base color is often dark; reset it.
+  mat.color.set(0xffffff);
 
-        // Prevent black material caused by a black base color.
-        if (!mat.color) {
-            mat.color = new THREE.Color(0xffffff);
-        } else if (
-            mat.color.r < 0.02 &&
-            mat.color.g < 0.02 &&
-            mat.color.b < 0.02
-        ) {
-            mat.color.set(0xffffff);
-        }
+  if(textureName && textures[textureName]) {
+   mat.map = textures[textureName];
+  }
 
-        mat.needsUpdate = true;
+  if(
+   textureName === "suit" &&
+   textures.normal &&
+   !mat.normalMap
+  ) {
+   mat.normalMap = textures.normal;
+   mat.normalScale.set(0.4,0.4);
+  }
 
-        console.log("[MATERIAL]", {
-            mesh: meshName,
-            material: name,
-            selectedTexture: textureName,
-            hasMap: !!mat.map
-        });
+  mat.needsUpdate = true;
 
-        return mat;
-    });
+  console.log("[MATERIAL]",{
+   mesh:meshName,
+   material:mat.name,
+   texture:textureName,
+   hasMap:!!mat.map
+  });
+
+  return mat;
+ });
 }
 
-/* =====================================================
+/* ==========================================
    CHARACTER PREPARATION
-===================================================== */
+========================================== */
 
 function prepareCharacter(model) {
-    const visualRoot = new THREE.Group();
-    visualRoot.name = "CharacterVisual";
+ const root = new THREE.Group();
+ root.name = "CharacterRoot";
 
-    model.traverse(obj => {
-        if (!obj.isMesh) return;
+ model.traverse(obj => {
+  if(!obj.isMesh) return;
 
-        obj.castShadow = true;
-        obj.receiveShadow = true;
+  obj.castShadow = true;
+  obj.receiveShadow = true;
 
-        obj.material = fixMaterial(obj.material, obj.name);
+  obj.material = prepareMaterial(obj.material,obj.name);
 
-        if (obj.geometry) {
-            obj.geometry.computeBoundingSphere();
-        }
-    });
+  if(obj.geometry) {
+   obj.geometry.computeBoundingBox();
+   obj.geometry.computeBoundingSphere();
+  }
+ });
 
-    // Normalize model dimensions.
-    const box = new THREE.Box3().setFromObject(model);
-    const size = new THREE.Vector3();
-    box.getSize(size);
+ const originalBox = new THREE.Box3().setFromObject(model);
+ const originalSize = new THREE.Vector3();
+ originalBox.getSize(originalSize);
 
-    const height = size.y;
+ if(originalSize.y <= 0) {
+  throw new Error("Model balandligini aniqlab bo'lmadi.");
+ }
 
-    if (!height || !Number.isFinite(height)) {
-        throw new Error("FBX model balandligini aniqlab bo‘lmadi.");
-    }
+ const scale = SETTINGS.characterHeight/originalSize.y;
+ model.scale.setScalar(scale);
 
-    const scale = CONFIG.characterHeight / height;
-    model.scale.setScalar(scale);
+ const scaledBox = new THREE.Box3().setFromObject(model);
+ model.position.y -= scaledBox.min.y;
 
-    // Recalculate bounds after scaling.
-    const scaledBox = new THREE.Box3().setFromObject(model);
+ model.rotation.y = SETTINGS.modelRotationY;
 
-    model.position.y -= scaledBox.min.y;
-    model.rotation.y = CONFIG.modelRotationY;
+ root.add(model);
 
-    visualRoot.add(model);
+ console.log("Character dimensions:",originalSize);
+ console.log("Character scale:",scale);
 
-    console.log("Model height:", height);
-    console.log("Model scale:", scale);
-
-    return visualRoot;
+ return root;
 }
 
-/* =====================================================
-   ANIMATION HELPERS
-===================================================== */
+/* ==========================================
+   ANIMATION
+========================================== */
 
-function removeRootTranslation(clip) {
-    const clone = clip.clone();
+function makeInPlaceClip(sourceClip) {
+ const clip = sourceClip.clone();
 
-    for (const track of clone.tracks) {
-        if (
-            track.name.toLowerCase().includes("mixamorighips.position")
-        ) {
-            const values = track.values;
+ for(const track of clip.tracks) {
+  if(track.name.toLowerCase().includes("mixamorighips.position")) {
+   const values = track.values;
 
-            if (values.length >= 3) {
-                const x = values[0];
-                const z = values[2];
+   if(values.length >= 3) {
+    const x = values[0];
+    const z = values[2];
 
-                for (let i = 0; i < values.length; i += 3) {
-                    values[i] = x;
-                    values[i + 2] = z;
-                }
-            }
-        }
+    for(let i=0;i<values.length;i+=3) {
+     values[i] = x;
+     values[i+2] = z;
     }
+   }
+  }
+ }
 
-    return clone;
+ return clip;
 }
 
-function setupAnimations(idleFBX, walkFBX, target) {
-    if (!idleFBX.animations.length) {
-        throw new Error("Idle FBX ichida animatsiya topilmadi.");
-    }
+function setupAnimations(idleFBX,walkFBX) {
+ if(!idleFBX.animations.length) {
+  throw new Error("idle.fbx ichida animatsiya yo'q.");
+ }
 
-    if (!walkFBX.animations.length) {
-        throw new Error("Walk FBX ichida animatsiya topilmadi.");
-    }
+ if(!walkFBX.animations.length) {
+  throw new Error("standartwalk.fbx ichida animatsiya yo'q.");
+ }
 
-    const idleClip = idleFBX.animations[0].clone();
-    const walkClip = removeRootTranslation(walkFBX.animations[0]);
+ const idleClip = idleFBX.animations[0].clone();
+ const walkClip = makeInPlaceClip(walkFBX.animations[0]);
 
-    console.log("IDLE TRACKS:", idleClip.tracks.length);
-    console.log("WALK TRACKS:", walkClip.tracks.length);
+ console.log("IDLE TRACKS:",idleClip.tracks.length);
+ console.log("WALK TRACKS:",walkClip.tracks.length);
 
-    console.table(walkClip.tracks.map(track => ({
-        track: track.name,
-        type: track.ValueTypeName
-    })));
+ mixer = new THREE.AnimationMixer(character);
 
-    mixer = new THREE.AnimationMixer(target);
+ idleAction = mixer.clipAction(idleClip);
+ walkAction = mixer.clipAction(walkClip);
 
-    idleAction = mixer.clipAction(idleClip);
-    walkAction = mixer.clipAction(walkClip);
+ idleAction.play();
+ walkAction.play();
 
-    idleAction.enabled = true;
-    walkAction.enabled = true;
+ walkAction.enabled = true;
+ walkAction.setEffectiveWeight(0);
 
-    idleAction.setEffectiveWeight(1);
-    walkAction.setEffectiveWeight(0);
-
-    idleAction.play();
-    walkAction.play();
-
-    currentAction = idleAction;
+ activeAction = idleAction;
 }
 
-function setAnimation(moving) {
-    if (!idleAction || !walkAction) return;
+function changeAnimation(moving) {
+ if(!idleAction || !walkAction) return;
 
-    const next = moving ? walkAction : idleAction;
+ const next = moving ? walkAction : idleAction;
 
-    if (currentAction === next) return;
+ if(next === activeAction) return;
 
-    next.enabled = true;
-    next.reset();
-    next.setEffectiveWeight(1);
+ next.reset();
+ next.enabled = true;
+ next.setEffectiveWeight(1);
 
-    currentAction.crossFadeTo(next, 0.22, false);
-    next.play();
+ activeAction.crossFadeTo(next,0.2,false);
+ next.play();
 
-    currentAction = next;
+ activeAction = next;
 }
 
-/* =====================================================
+/* ==========================================
    LOAD CHARACTER
-===================================================== */
+========================================== */
 
 async function loadCharacter() {
-    status("Teksturalar yuklanmoqda...");
-    await loadTextures();
+ setLoading("Teksturalar yuklanmoqda...");
+ await loadAllTextures();
 
-    status("Idle modeli yuklanmoqda...");
-    const idleFBX = await loader.loadAsync(CONFIG.files.idle);
+ setLoading("Idle personaj modeli yuklanmoqda...");
+ const idleFBX = await fbxLoader.loadAsync(
+  new URL(FILES.idle,BASE).href
+ );
 
-    status("Walk modeli yuklanmoqda...");
-    const walkFBX = await loader.loadAsync(CONFIG.files.walk);
+ setLoading("Walk animatsiyasi yuklanmoqda...");
+ const walkFBX = await fbxLoader.loadAsync(
+  new URL(FILES.walk,BASE).href
+ );
 
-    status("Personaj tayyorlanmoqda...");
+ setLoading("Personaj tayyorlanmoqda...");
 
-    character = prepareCharacter(idleFBX);
+ character = prepareCharacter(idleFBX);
+ scene.add(character);
 
-    scene.add(character);
+ setupAnimations(idleFBX,walkFBX);
 
-    setupAnimations(idleFBX, walkFBX, character);
+ character.position.set(0,0,0);
 
-    character.position.set(0, 0, 0);
+ ready = true;
+ hideLoading();
 
-    status("Dunyo tayyorlanmoqda...");
-    finishLoading();
+ console.log("GAME READY");
 }
 
-/* =====================================================
+/* ==========================================
    CAMERA
-===================================================== */
+========================================== */
 
 function updateCamera(delta) {
-    if (!character) return;
+ if(!character) return;
 
-    const target = new THREE.Vector3(
-        character.position.x,
-        character.position.y + CONFIG.camera.height,
-        character.position.z
-    );
+ const target = new THREE.Vector3(
+  character.position.x,
+  character.position.y+SETTINGS.cameraHeight,
+  character.position.z
+ );
 
-    const horizontal = Math.cos(pitch) * cameraDistance;
-    const vertical = Math.sin(pitch) * cameraDistance;
+ const horizontal = Math.cos(pitch)*cameraDistance;
+ const vertical = Math.sin(pitch)*cameraDistance;
 
-    const desired = new THREE.Vector3(
-        target.x + Math.sin(yaw) * horizontal,
-        target.y + vertical,
-        target.z + Math.cos(yaw) * horizontal
-    );
+ const desired = new THREE.Vector3(
+  target.x+Math.sin(yaw)*horizontal,
+  target.y+vertical,
+  target.z+Math.cos(yaw)*horizontal
+ );
 
-    camera.position.lerp(
-        desired,
-        1 - Math.exp(-7 * delta)
-    );
+ camera.position.lerp(
+  desired,
+  1-Math.exp(-8*delta)
+ );
 
-    camera.lookAt(target);
+ camera.lookAt(target);
 }
 
-/* =====================================================
-   INPUT
-===================================================== */
+/* ==========================================
+   CONTROLS
+========================================== */
 
-window.addEventListener("keydown", event => {
-    keys[event.code] = true;
+window.addEventListener("keydown",event=>{
+ keys[event.code] = true;
 
-    if (
-        event.code === "Space" &&
-        grounded &&
-        ready
-    ) {
-        verticalVelocity = CONFIG.movement.jumpSpeed;
-        grounded = false;
-    }
+ if(
+  event.code === "Space" &&
+  grounded &&
+  ready
+ ) {
+  verticalVelocity = SETTINGS.jumpSpeed;
+  grounded = false;
+  event.preventDefault();
+ }
 });
 
-window.addEventListener("keyup", event => {
-    keys[event.code] = false;
+window.addEventListener("keyup",event=>{
+ keys[event.code] = false;
 });
 
-renderer.domElement.addEventListener("click", () => {
-    if (!document.pointerLockElement && ready) {
-        renderer.domElement.requestPointerLock();
-    }
+window.addEventListener("blur",()=>{
+ for(const key in keys) keys[key] = false;
 });
 
-document.addEventListener("mousemove", event => {
-    if (document.pointerLockElement !== renderer.domElement) return;
-
-    yaw -= event.movementX * CONFIG.camera.sensitivity;
-    pitch -= event.movementY * CONFIG.camera.sensitivity;
-
-    pitch = THREE.MathUtils.clamp(
-        pitch,
-        CONFIG.camera.minPitch,
-        CONFIG.camera.maxPitch
-    );
+renderer.domElement.addEventListener("click",()=>{
+ if(ready && document.pointerLockElement !== renderer.domElement) {
+  renderer.domElement.requestPointerLock();
+ }
 });
 
-renderer.domElement.addEventListener("wheel", event => {
-    cameraDistance += event.deltaY * 0.005;
-    cameraDistance = THREE.MathUtils.clamp(
-        cameraDistance,
-        2.2,
-        9
-    );
+document.addEventListener("mousemove",event=>{
+ if(document.pointerLockElement !== renderer.domElement) return;
+
+ yaw -= event.movementX*SETTINGS.cameraSensitivity;
+ pitch -= event.movementY*SETTINGS.cameraSensitivity;
+
+ pitch = THREE.MathUtils.clamp(
+  pitch,
+  SETTINGS.minPitch,
+  SETTINGS.maxPitch
+ );
 });
 
-/* =====================================================
+renderer.domElement.addEventListener("wheel",event=>{
+ cameraDistance += event.deltaY*0.004;
+ cameraDistance = THREE.MathUtils.clamp(cameraDistance,2,9);
+});
+
+/* ==========================================
    MOVEMENT
-===================================================== */
+========================================== */
 
 function updateMovement(delta) {
-    if (!character || !ready) return;
+ if(!character || !ready) return;
 
-    let forward = 0;
-    let side = 0;
+ let forward = 0;
+ let side = 0;
 
-    if (keys.KeyW || keys.ArrowUp) forward += 1;
-    if (keys.KeyS || keys.ArrowDown) forward -= 1;
-    if (keys.KeyA || keys.ArrowLeft) side -= 1;
-    if (keys.KeyD || keys.ArrowRight) side += 1;
+ if(keys.KeyW || keys.ArrowUp) forward += 1;
+ if(keys.KeyS || keys.ArrowDown) forward -= 1;
+ if(keys.KeyA || keys.ArrowLeft) side -= 1;
+ if(keys.KeyD || keys.ArrowRight) side += 1;
 
-    const moving = forward !== 0 || side !== 0;
+ const moving = forward !== 0 || side !== 0;
 
-    const direction = new THREE.Vector3();
+ if(moving) {
+  const input = new THREE.Vector2(side,forward).normalize();
 
-    if (moving) {
-        direction.set(side, 0, forward).normalize();
+  const cameraForward = new THREE.Vector3(
+   -Math.sin(yaw),0,-Math.cos(yaw)
+  );
 
-        const cameraForward = new THREE.Vector3(
-            -Math.sin(yaw),
-            0,
-            -Math.cos(yaw)
-        );
+  const cameraRight = new THREE.Vector3(
+   -cameraForward.z,0,cameraForward.x
+  );
 
-        const cameraRight = new THREE.Vector3(
-            -cameraForward.z,
-            0,
-            cameraForward.x
-        );
+  const direction = new THREE.Vector3()
+   .addScaledVector(cameraForward,input.y)
+   .addScaledVector(cameraRight,input.x)
+   .normalize();
 
-        const movement = new THREE.Vector3()
-            .addScaledVector(cameraForward, direction.z)
-            .addScaledVector(cameraRight, direction.x)
-            .normalize();
+  const targetAngle = Math.atan2(direction.x,direction.z);
 
-        const targetAngle = Math.atan2(
-            movement.x,
-            movement.z
-        );
+  let diff = Math.atan2(
+   Math.sin(targetAngle-character.rotation.y),
+   Math.cos(targetAngle-character.rotation.y)
+  );
 
-        // Adjust model facing direction here if needed.
-        const modelFacing = targetAngle;
+  character.rotation.y += diff*(1-Math.exp(-12*delta));
 
-        const angleDifference = Math.atan2(
-            Math.sin(modelFacing - character.rotation.y),
-            Math.cos(modelFacing - character.rotation.y)
-        );
+  const running = keys.ShiftLeft || keys.ShiftRight;
+  const speed = running ? SETTINGS.runSpeed : SETTINGS.walkSpeed;
 
-        character.rotation.y += angleDifference *
-            (1 - Math.exp(-12 * delta));
+  character.position.addScaledVector(direction,speed*delta);
+ }
 
-        const running = keys.ShiftLeft || keys.ShiftRight;
+ if(!grounded) {
+  verticalVelocity -= SETTINGS.gravity*delta;
+  character.position.y += verticalVelocity*delta;
 
-        const speed = running
-            ? CONFIG.movement.runSpeed
-            : CONFIG.movement.walkSpeed;
+  if(character.position.y <= 0) {
+   character.position.y = 0;
+   verticalVelocity = 0;
+   grounded = true;
+  }
+ }
 
-        character.position.addScaledVector(
-            movement,
-            speed * delta
-        );
-    }
+ changeAnimation(moving);
 
-    if (!grounded) {
-        verticalVelocity -= CONFIG.movement.gravity * delta;
-        character.position.y += verticalVelocity * delta;
-
-        if (character.position.y <= 0) {
-            character.position.y = 0;
-            verticalVelocity = 0;
-            grounded = true;
-        }
-    }
-
-    setAnimation(moving);
-
-    if (mixer) {
-        mixer.update(delta);
-    }
-
-    $("state").textContent =
-        moving
-            ? (keys.ShiftLeft || keys.ShiftRight ? "Yugurmoqda" : "Yurmoqda")
-            : "Idle";
+ $("gameState").textContent =
+  moving
+   ? (keys.ShiftLeft || keys.ShiftRight ? "Yugurmoqda" : "Yurmoqda")
+   : "Idle";
 }
 
-/* =====================================================
-   MAIN LOOP
-===================================================== */
+/* ==========================================
+   ANIMATION LOOP
+========================================== */
 
 function animate() {
-    requestAnimationFrame(animate);
+ requestAnimationFrame(animate);
 
-    const delta = Math.min(clock.getDelta(), 0.05);
+ const delta = Math.min(clock.getDelta(),0.05);
 
-    if (ready) {
-        updateMovement(delta);
-        updateCamera(delta);
-    }
+ if(ready) {
+  updateMovement(delta);
+  if(mixer) mixer.update(delta);
+  updateCamera(delta);
+ }
 
-    renderer.render(scene, camera);
+ renderer.render(scene,camera);
 
-    fpsFrames++;
-    fpsTime += delta;
+ fpsCounter++;
+ fpsElapsed += delta;
 
-    if (fpsTime >= 0.5) {
-        $("fps").textContent = Math.round(fpsFrames / fpsTime);
-        fpsFrames = 0;
-        fpsTime = 0;
-    }
+ if(fpsElapsed >= 0.5) {
+  $("fps").textContent = Math.round(fpsCounter/fpsElapsed);
+  fpsCounter = 0;
+  fpsElapsed = 0;
+ }
 }
 
-/* =====================================================
+/* ==========================================
    RESIZE
-===================================================== */
+========================================== */
 
-window.addEventListener("resize", () => {
-    camera.aspect = innerWidth / innerHeight;
-    camera.updateProjectionMatrix();
-
-    renderer.setSize(innerWidth, innerHeight);
+window.addEventListener("resize",()=>{
+ camera.aspect = innerWidth/innerHeight;
+ camera.updateProjectionMatrix();
+ renderer.setSize(innerWidth,innerHeight);
 });
 
-/* =====================================================
+/* ==========================================
    START
-===================================================== */
+========================================== */
 
 async function start() {
-    try {
-        createWorld();
+ try {
+  createWorld();
 
-        camera.position.set(0, 2.5, 5);
-        camera.lookAt(0, 1, 0);
+  camera.position.set(0,2,5);
+  camera.lookAt(0,1,0);
 
-        animate();
+  animate();
 
-        await loadCharacter();
+  await loadCharacter();
 
-        updateCamera(1 / 60);
+  updateCamera(1/60);
 
-    } catch (error) {
-        showError(error);
-    }
+ } catch(error) {
+  fatalError(error);
+ }
 }
 
 start();
